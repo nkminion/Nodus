@@ -55,7 +55,7 @@ class LoginPage extends StatelessWidget
 									{
 										Navigator.of(context).push(
 											MaterialPageRoute<void>(
-											builder: (context) => NavigationPage(displayName: textControl.text)
+											builder: (context) => NavigationPage(dispName: textControl.text)
 											)
 										);
 									}

@@ -1,25 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:nodus/chat_page.dart';
-
-class User
-{
-	final String id;
-	final String displayName;
-	final bool reachable;
-
-	User({required this.id, required this.displayName, this.reachable=true});
-}
+import 'package:nodus/util_classes.dart';
 
 final List<User> nearbyUsers = [
-	User(id: '001', displayName: 'ArchUser'),
-	User(id: '002', displayName: 'SkibidiBoy'),
-	User(id: '003', displayName: 'Penguin', reachable: false),
+	User(uid: '001', dispName: 'ArchUser'),
+	User(uid: '002', dispName: 'SkibidiBoy'),
+	User(uid: '003', dispName: 'Penguin'),
 ];
 
 class NavigationPage extends StatefulWidget
 {
-	const NavigationPage({super.key, required this.displayName});
-	final String displayName;
+	const NavigationPage({super.key, required this.dispName});
+	final String dispName;
 
   @override
   State<NavigationPage> createState() => _NavigationPageState();
@@ -42,13 +34,13 @@ class _NavigationPageState extends State<NavigationPage> {
 						ListTile(
 							leading: CircleAvatar(
 								backgroundColor: Colors.deepPurpleAccent,
-								child: Text(user.displayName[0]),
+								child: Text(user.dispName[0]),
 							),
-							title: Text(user.displayName),
-							subtitle: Text(user.reachable ? 'Connected' : 'Offline'),
+							title: Text(user.dispName),
+							subtitle: Text(user.hops < 4 ? 'Connected' : 'Offline'),
 							trailing: Icon(
 								Icons.circle,
-								color:	user.reachable ? Colors.green : Colors.red,
+								color:	user.hops < 2 ? Colors.green : user.hops < 4 ? Colors.amber : Colors.red,
 								size: 10,
 							),
 							onTap: (){Navigator.of(context).push(
@@ -66,7 +58,7 @@ class _NavigationPageState extends State<NavigationPage> {
 	{
 		if (currentState == 0)
 		{
-			return buildList(nearbyUsers.where((u) => u.reachable==true).toList());
+			return buildList(nearbyUsers.where((u) => u.hops < 4).toList());
 		}
 		else
 		{
@@ -79,7 +71,7 @@ class _NavigationPageState extends State<NavigationPage> {
 	{
 		return Scaffold(
 			appBar: AppBar(
-				title: Center(child:Text(widget.displayName)),
+				title: Center(child:Text(widget.dispName)),
 				backgroundColor: Colors.black,
 				foregroundColor: const Color.fromARGB(255, 214, 237, 255),
 			),

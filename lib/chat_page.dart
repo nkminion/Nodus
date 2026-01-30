@@ -1,23 +1,19 @@
 import 'package:flutter/material.dart';
-import 'navigation_page.dart';
+import 'util_classes.dart';
+import 'package:uuid/uuid.dart';
 
-class Message
-{
-	final String text;
-	final bool isMe;
-	final String timestamp;
-
-	Message({required this.text,required this.isMe,required this.timestamp});
-}
+final uuid = Uuid();
 
 final List<Message> testMessages = [
-	Message(text: 'Mambo', isMe: true, timestamp: "6:09AM"),
-	Message(text: 'WOAHHH', isMe: false, timestamp: "7:11AM"),
-	Message(text: 'DUANNGGGG', isMe: true, timestamp: "9:11AM"),
+	Message(msgId: '001', toUId: '002', msg: 'Mambo', isMe: true, timeStamp: 00000),
+	Message(msgId: '002', toUId: '003', msg: 'WOAHHH', isMe: false, timeStamp: 00001),
+	Message(msgId: '003', toUId: '004', msg: 'DUANNGGGG', isMe: true, timeStamp: 00002),
 	Message(
-		text: "The monkey causes more problems than he's worth. His curiosity has hurt or at the very least made peoples lives more difficult just because The Man with the Yellow Hat can't be bothered to control him. After this many “lessons” the damn monkey has had after fucking everyone over, it's clear he's not gonna learn. He's gonna keep fucking up. And we're all made to pay the price just because The Man with the Yellow Hat has no sense of decency. Eventually the monkey will end up causing a death or many deaths & he needs to be destroyed before it happens. The monkey has got to go.. If The Man with the Yellow Hat isn't able to do it himself, he should turn the monkey over to the people and let them handle it. And after it's done The Man with the Yellow Hat should at the very least be fined and made to do community service. And If he resists he can follow Curious George into death.",
+		msgId: '004',
+		toUId: '005',
+		msg: "The monkey causes more problems than he's worth. His curiosity has hurt or at the very least made peoples lives more difficult just because The Man with the Yellow Hat can't be bothered to control him. After this many “lessons” the damn monkey has had after fucking everyone over, it's clear he's not gonna learn. He's gonna keep fucking up. And we're all made to pay the price just because The Man with the Yellow Hat has no sense of decency. Eventually the monkey will end up causing a death or many deaths & he needs to be destroyed before it happens. The monkey has got to go.. If The Man with the Yellow Hat isn't able to do it himself, he should turn the monkey over to the people and let them handle it. And after it's done The Man with the Yellow Hat should at the very least be fined and made to do community service. And If he resists he can follow Curious George into death.",
 		isMe: true,
-		timestamp: "4:20PM"
+		timeStamp: 00003
 		)
 ];
 
@@ -56,8 +52,8 @@ class _ChatPageState extends State<ChatPage>
 						child: Column(
               crossAxisAlignment: message.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
-                Text(message.text),
-                Text(message.timestamp,
+                Text(message.msg),
+                Text(DateTime.fromMillisecondsSinceEpoch(message.timeStamp).toString(),
                   style: TextStyle(
                     fontSize: 10,
                   ),
@@ -87,9 +83,9 @@ class _ChatPageState extends State<ChatPage>
 								fit: FlexFit.tight,
 								child: Column(
 									children: [
-										Text(widget.user.displayName),
+										Text(widget.user.dispName),
 										Text(
-											widget.user.id,
+											widget.user.uid,
 											style: TextStyle(
 												fontSize: 16,
 											),
@@ -140,17 +136,8 @@ class _ChatPageState extends State<ChatPage>
                         setState(() {
                           if (messageController.text != "")
                           {
-                            testMessages.add(Message(text: messageController.text, isMe: true, timestamp: "Time does not matter man"));
+                            testMessages.add(Message(msgId: uuid.v7(), toUId: widget.user.uid,msg: messageController.text, isMe: true, timeStamp: DateTime.now().millisecondsSinceEpoch));
                             messageController.clear();
-                          }
-                        });
-
-                        Future.delayed(const Duration(seconds: 1), (){
-                          if (mounted)
-                          {
-                            setState(() {
-                              testMessages.add(Message(text: "I am replying to you bro", isMe: false, timestamp: "now"));
-                            });
                           }
                         });
                       },
