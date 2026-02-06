@@ -77,7 +77,7 @@ class _ChatPageState extends State<ChatPage>
 							Icon(
 								Icons.circle,
 								size: 10,
-								color: Colors.green,
+								color: widget.user.hops < 2 ? Colors.green : widget.user.hops < 4 ? Colors.amber : Colors.red,
 							),
 							Flexible(
 								fit: FlexFit.tight,
@@ -139,6 +139,15 @@ class _ChatPageState extends State<ChatPage>
                             testMessages.add(Message(msgId: uuid.v7(), toUId: widget.user.uid,msg: messageController.text, isMe: true, timeStamp: DateTime.now().millisecondsSinceEpoch));
                             messageController.clear();
                           }
+
+						  Future.delayed(const Duration(seconds: 1), (){
+                          if (mounted)
+                          {
+                            setState(() {
+                              testMessages.add(Message(msgId:'006',toUId: '001',msg: "I am replying to you bro", isMe: false, timeStamp: DateTime.now().millisecondsSinceEpoch));
+                            });
+                          }
+                        });
                         });
                       },
                     )

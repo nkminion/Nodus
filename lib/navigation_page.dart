@@ -1,12 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nodus/chat_page.dart';
+import 'package:nodus/connection_manager.dart';
 import 'package:nodus/util_classes.dart';
-
-final List<User> nearbyUsers = [
-	User(uid: '001', dispName: 'ArchUser'),
-	User(uid: '002', dispName: 'SkibidiBoy'),
-	User(uid: '003', dispName: 'Penguin'),
-];
 
 class NavigationPage extends StatefulWidget
 {
@@ -22,6 +17,12 @@ class NavigationPage extends StatefulWidget
 class _NavigationPageState extends State<NavigationPage> {
 	int currentState = 0;
 	
+  void initState()
+  {
+    super.initState();
+    ConnectionManager.instance.init(widget.dispName);
+  }
+
 	Widget buildList(List<User> list)
 	{
 		return ListView.builder(
@@ -58,11 +59,21 @@ class _NavigationPageState extends State<NavigationPage> {
 	{
 		if (currentState == 0)
 		{
-			return buildList(nearbyUsers.where((u) => u.hops < 4).toList());
+			return ValueListenableBuilder<List<User>>(
+				valueListenable: ConnectionManager.instance.connectedNodes,
+				builder: (context,users,child) {
+					if (users.isEmpty)
+					{
+						return const Center(child: Text("Scanning for nodes..."),);
+					}
+
+					return buildList(users);
+				},
+			);
 		}
 		else
 		{
-			return buildList(nearbyUsers);
+			return const Center(child: Text("I need to integrate the database lmao"));
 		}
 	}
 
@@ -104,7 +115,7 @@ class _NavigationPageState extends State<NavigationPage> {
 										),
 										onPressed: (){setState(() {currentState = 1;});},
 										child: Text(
-											'History'
+											'Contacts'
 										),
 									)
 								),

@@ -4,7 +4,7 @@ class User
   String dispName;
   int hops;
 
-  User({required this.uid, required this.dispName, this.hops = -1});
+  User({required this.uid, required this.dispName, this.hops = 1});
 
   factory User.fromJson(Map<String,dynamic> map)
   {
