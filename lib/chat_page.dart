@@ -1,5 +1,5 @@
 import 'dart:async';
-
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:nodus/connection_manager.dart';
 import 'util_classes.dart';
@@ -27,16 +27,28 @@ class _ChatPageState extends State<ChatPage>
   @override
   void initState()
   {
+    String? myUID;
+
     super.initState();
 
+    () async {
+      final prefs = await SharedPreferences.getInstance();
+
+      myUID = prefs.getString('UID');
+    }();
+
     _msgSubscription = ConnectionManager.instance.messageStream.listen((msg){
-      if (msg.toUId == widget.user.uid)
+      print('Received message: toUID: ${msg.toUId} | myId: ${widget.user.uid}');
+      if (msg.toUId == myUID)
       {
+        print('Id matched');
         if (mounted)
         {
+          print('Refreshing...');
           setState(() {
             _messages.add(msg);
           });
+          print('Added...');
         }
       }
     });

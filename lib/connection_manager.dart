@@ -184,7 +184,7 @@ class ConnectionManager
     {
       if (user.endPointId != null)
       {
-        nearby.sendBytesPayload(user.uid, bytes);
+        nearby.sendBytesPayload(user.endPointId!, bytes);
       }
     }
   }
@@ -204,6 +204,7 @@ class ConnectionManager
       String jsonPacket = utf8.decode(payload.bytes!);
       Map<String,dynamic> packet = jsonDecode(jsonPacket);
       String type = packet['type'];
+      print('Packet type: $type');
       try
       {
         if (type == 'handshake')
@@ -222,7 +223,7 @@ class ConnectionManager
           currentList.add(newNode);
           connectedNodes.value = currentList;
         }
-        else if (type == 'msg')
+        else if (type == 'message')
         {
           bool connected = connectedNodes.value.any((u) => u.endPointId == endPointId);
           if (connected)
@@ -231,8 +232,7 @@ class ConnectionManager
             String msg = packet['msg'];
             if (receiver == myUID)
             {
-              print('Received from $endPointId: $msg');
-              Message incomingMsg = Message(msgId: uuid.v7(), toUId: endPointId, msg: msg, isMe: false, timeStamp: DateTime.now().millisecondsSinceEpoch);
+              Message incomingMsg = Message(msgId: packet['id'], toUId: packet['to'], msg: msg, isMe: false, timeStamp: packet['timeStamp']);
               _messageStreamController.add(incomingMsg);
             }
             else
