@@ -3,8 +3,9 @@ class User
   final String uid;
   String dispName;
   int hops;
+  String? endPointId;
 
-  User({required this.uid, required this.dispName, this.hops = 1});
+  User({required this.uid, required this.dispName, this.hops = 1, this.endPointId});
 
   factory User.fromJson(Map<String,dynamic> map)
   {

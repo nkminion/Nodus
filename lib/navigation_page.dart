@@ -14,14 +14,23 @@ class NavigationPage extends StatefulWidget
 
 
 
-class _NavigationPageState extends State<NavigationPage> {
+class _NavigationPageState extends State<NavigationPage>
+{
 	int currentState = 0;
 	
-  void initState()
-  {
-    super.initState();
-    ConnectionManager.instance.init(widget.dispName);
-  }
+  @override
+	void initState()
+	{
+		super.initState();
+		ConnectionManager.instance.init(widget.dispName);
+	}
+
+	@override
+	void dispose()
+	{
+		ConnectionManager.instance.dispose();
+		super.dispose();
+	}
 
 	Widget buildList(List<User> list)
 	{

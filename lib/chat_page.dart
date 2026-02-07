@@ -1,21 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:nodus/connection_manager.dart';
 import 'util_classes.dart';
 import 'package:uuid/uuid.dart';
 
 final uuid = Uuid();
-
-final List<Message> testMessages = [
-	Message(msgId: '001', toUId: '002', msg: 'Mambo', isMe: true, timeStamp: 00000),
-	Message(msgId: '002', toUId: '003', msg: 'WOAHHH', isMe: false, timeStamp: 00001),
-	Message(msgId: '003', toUId: '004', msg: 'DUANNGGGG', isMe: true, timeStamp: 00002),
-	Message(
-		msgId: '004',
-		toUId: '005',
-		msg: "The monkey causes more problems than he's worth. His curiosity has hurt or at the very least made peoples lives more difficult just because The Man with the Yellow Hat can't be bothered to control him. After this many “lessons” the damn monkey has had after fucking everyone over, it's clear he's not gonna learn. He's gonna keep fucking up. And we're all made to pay the price just because The Man with the Yellow Hat has no sense of decency. Eventually the monkey will end up causing a death or many deaths & he needs to be destroyed before it happens. The monkey has got to go.. If The Man with the Yellow Hat isn't able to do it himself, he should turn the monkey over to the people and let them handle it. And after it's done The Man with the Yellow Hat should at the very least be fined and made to do community service. And If he resists he can follow Curious George into death.",
-		isMe: true,
-		timeStamp: 00003
-		)
-];
 
 class ChatPage extends StatefulWidget
 {
@@ -30,6 +20,27 @@ class _ChatPageState extends State<ChatPage>
 {
 
   final TextEditingController messageController = TextEditingController();
+
+  final List<Message> _messages = [];
+  StreamSubscription? _msgSubscription;
+
+  @override
+  void initState()
+  {
+    super.initState();
+
+    _msgSubscription = ConnectionManager.instance.messageStream.listen((msg){
+      if (msg.toUId == widget.user.uid)
+      {
+        if (mounted)
+        {
+          setState(() {
+            _messages.add(msg);
+          });
+        }
+      }
+    });
+  }
 
 	Widget renderMessages(List<Message> messages)
 	{
@@ -87,7 +98,7 @@ class _ChatPageState extends State<ChatPage>
 										Text(
 											widget.user.uid,
 											style: TextStyle(
-												fontSize: 16,
+												fontSize: 9,
 											),
 										),
 									],
@@ -100,7 +111,7 @@ class _ChatPageState extends State<ChatPage>
 				Column(
 					children: [
 						Expanded(
-							child: renderMessages(testMessages),
+							child: renderMessages(_messages),
 						),
 						Container(
 							padding: EdgeInsets.only(left:10,right:10,top: 24,bottom: 50),
@@ -133,22 +144,26 @@ class _ChatPageState extends State<ChatPage>
                         color: const Color.fromARGB(255, 214, 237, 255),
                       ),
                       onPressed: () {
-                        setState(() {
-                          if (messageController.text != "")
-                          {
-                            testMessages.add(Message(msgId: uuid.v7(), toUId: widget.user.uid,msg: messageController.text, isMe: true, timeStamp: DateTime.now().millisecondsSinceEpoch));
-                            messageController.clear();
-                          }
+                        final text = messageController.text;
+                        if (text.isNotEmpty)
+                        {
+                          String msgId = uuid.v7();
+                          int timeStamp = DateTime.now().millisecondsSinceEpoch;
+                          ConnectionManager.instance.sendMessage(text,widget.user.uid,msgId,timeStamp);
 
-						  Future.delayed(const Duration(seconds: 1), (){
-                          if (mounted)
-                          {
-                            setState(() {
-                              testMessages.add(Message(msgId:'006',toUId: '001',msg: "I am replying to you bro", isMe: false, timeStamp: DateTime.now().millisecondsSinceEpoch));
-                            });
-                          }
-                        });
-                        });
+                          setState(() {
+                            _messages.add(
+                              Message(
+                                msgId: msgId,
+                                toUId: widget.user.uid,
+                                msg: text,
+                                isMe: true,
+                                timeStamp: timeStamp,
+                              )
+                            );
+                          });
+                        }
+                        messageController.clear();
                       },
                     )
                   )
@@ -159,4 +174,12 @@ class _ChatPageState extends State<ChatPage>
 				)
 		);
 	}
+
+  @override
+  void dispose()
+  {
+    _msgSubscription?.cancel();
+    messageController.dispose();
+    super.dispose();
+  }
 }
