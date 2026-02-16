@@ -1,16 +1,12 @@
-# nodus
+# Nodus
 
-A new Flutter project.
+P2P decentralised mesh network texting app made with flutter.
 
-## Getting Started
+This helps you communicate with people without the use of internet.
 
-This project is a starting point for a Flutter application.
+Uses wifi-direct/bluetooth to form a mesh network.
 
-A few resources to get you started if this is your first Flutter project:
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+# Future updates:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Encryption
