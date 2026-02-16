@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:nodus/chat_page.dart';
 import 'package:nodus/connection_manager.dart';
+import 'package:nodus/database_helper.dart';
 import 'package:nodus/util_classes.dart';
 
 class NavigationPage extends StatefulWidget
 {
-	const NavigationPage({super.key, required this.dispName});
+	const NavigationPage({super.key, required this.dispName, required this.myUID});
 	final String dispName;
+	final String myUID;
 
   @override
   State<NavigationPage> createState() => _NavigationPageState();
@@ -55,7 +57,7 @@ class _NavigationPageState extends State<NavigationPage>
 							),
 							onTap: (){Navigator.of(context).push(
 								MaterialPageRoute<void>(
-									builder: (context) => ChatPage(user: user)
+									builder: (context) => ChatPage(user: user,myUID: widget.myUID,)
 								)
 							);},
 						),
@@ -68,7 +70,7 @@ class _NavigationPageState extends State<NavigationPage>
 	{
 		if (currentState == 0)
 		{
-			return ValueListenableBuilder<List<User>>(
+			return ValueListenableBuilder<Map<String,User>>(
 				valueListenable: ConnectionManager.instance.connectedNodes,
 				builder: (context,users,child) {
 					if (users.isEmpty)
@@ -76,13 +78,55 @@ class _NavigationPageState extends State<NavigationPage>
 						return const Center(child: Text("Scanning for nodes..."),);
 					}
 
-					return buildList(users);
+					return buildList(users.values.toList());
 				},
 			);
 		}
 		else
 		{
-			return const Center(child: Text("I need to integrate the database lmao"));
+      return FutureBuilder<List<User>>(
+        future: DatabaseHelper.instance.fetchContacts(widget.myUID),
+        builder: (context,snapshot)
+        {
+          if (snapshot.connectionState == ConnectionState.waiting)
+          {
+            return const Center(child: Text("Fetching contacts..."),);
+          }
+          else if (snapshot.hasError)
+          {
+            return const Center(child: Text('Database Error.'),);
+          }
+          else
+          {
+            List<User> contacts = snapshot.data!;
+            return ValueListenableBuilder<Map<String,User>>(
+              valueListenable: ConnectionManager.instance.connectedNodes,
+              builder: (context,liveNodeMap,child) {
+                if (contacts.isEmpty)
+                {
+                  return const Center(child: Text("No contacts found."),);
+                }
+                for (User contact in contacts)
+                {
+                  if (liveNodeMap.containsKey(contact.uid))
+                  {
+                    contact.dispName = liveNodeMap[contact.uid]!.dispName;
+                    contact.hops = liveNodeMap[contact.uid]!.hops;
+                    contact.endPointId = liveNodeMap[contact.uid]!.endPointId;
+                    DatabaseHelper.instance.insertContact(contact.uid, contact.dispName);
+                  }
+                  else
+                  {
+                    contact.hops = 5;
+                    contact.endPointId = null;
+                  }
+                }
+                return buildList(contacts);
+              },
+            );
+          }
+        }
+      );      
 		}
 	}
 

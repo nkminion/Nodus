@@ -5,7 +5,7 @@ class User
   int hops;
   String? endPointId;
 
-  User({required this.uid, required this.dispName, this.hops = 1, this.endPointId});
+  User({required this.uid, required this.dispName, this.hops = 5, this.endPointId});
 
   factory User.fromJson(Map<String,dynamic> map)
   {
@@ -17,16 +17,27 @@ class User
 class Message
 {
   final String msgId;
+  final String fromUId;
   final String toUId;
   final String msg;
-  final bool isMe;
   final int timeStamp;
 
-  Message({required this.msgId, required this.toUId, required this.msg, required this.isMe, required this.timeStamp});
+  Message({required this.msgId, required this.fromUId, required this.toUId, required this.msg, required this.timeStamp});
 
   factory Message.fromJson(Map<String,dynamic> map)
   {
     print("Msg database Keys: ${map.keys}");
-    return Message(msgId: map['MsgID'], toUId: map['ToUID'], msg: map['Msg'], isMe: map['IsMe'] == 1, timeStamp: map['TimeStamp']);
+    return Message(msgId: map['MsgID'], fromUId:map['FromUID'] ,toUId: map['ToUID'], msg: map['Msg'], timeStamp: map['TimeStamp']);
+  }
+
+  Map<String,dynamic> toMap()
+  {
+    return {
+      'MsgID':msgId,
+      'FromUID':fromUId,
+      'ToUID':toUId,
+      'Msg':msg,
+      'TimeStamp':timeStamp,
+    };
   }
 }

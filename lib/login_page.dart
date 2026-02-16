@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'navigation_page.dart';
+import 'connection_manager.dart';
 
 class LoginPage extends StatelessWidget
 {
@@ -49,13 +50,14 @@ class LoginPage extends StatelessWidget
 						SizedBox(
 							width: 150,
 							child: ElevatedButton(
-								onPressed: ()
+								onPressed: () async
 								{
 									if (textControl.text != "")
 									{
+                    await ConnectionManager.instance.loadUID();
 										Navigator.of(context).push(
 											MaterialPageRoute<void>(
-											builder: (context) => NavigationPage(dispName: textControl.text)
+											builder: (context) => NavigationPage(dispName: textControl.text,myUID:ConnectionManager.instance.myUID!)
 											)
 										);
 									}

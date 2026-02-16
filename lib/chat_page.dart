@@ -1,16 +1,17 @@
 import 'dart:async';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:nodus/connection_manager.dart';
 import 'util_classes.dart';
 import 'package:uuid/uuid.dart';
+import 'database_helper.dart';
 
 final uuid = Uuid();
 
 class ChatPage extends StatefulWidget
 {
-	const ChatPage({super.key, required this.user});
+	const ChatPage({super.key, required this.user, required this.myUID});
 	final User user;
+  final String myUID;
 
 	@override
 	State<ChatPage> createState() => _ChatPageState();
@@ -27,19 +28,22 @@ class _ChatPageState extends State<ChatPage>
   @override
   void initState()
   {
-    String? myUID;
-
     super.initState();
 
     () async {
-      final prefs = await SharedPreferences.getInstance();
-
-      myUID = prefs.getString('UID');
+      List<Message> fetchedHist = await DatabaseHelper.instance.fetchMessages(widget.myUID,widget.user.uid);
+      if (mounted)
+      {
+        print('Message history length: ${fetchedHist.length}');
+        setState(() {
+          _messages.addAll(fetchedHist);
+        });
+      }
     }();
 
     _msgSubscription = ConnectionManager.instance.messageStream.listen((msg){
       print('Received message: toUID: ${msg.toUId} | myId: ${widget.user.uid}');
-      if (msg.toUId == myUID)
+      if ((msg.toUId == widget.myUID)&&(msg.fromUId == widget.user.uid))
       {
         print('Id matched');
         if (mounted)
@@ -63,17 +67,17 @@ class _ChatPageState extends State<ChatPage>
 			{
 				final message = messages[messages.length-1-index];
 				return Align(
-					alignment: message.isMe ? Alignment.centerRight : Alignment.centerLeft,
+					alignment: (message.fromUId == widget.myUID) ? Alignment.centerRight : Alignment.centerLeft,
 					child:
 					Container(
 						margin: EdgeInsets.all(10),
 						padding: EdgeInsets.all(15),
 						decoration: BoxDecoration(
-							color: message.isMe ? Colors.blue : Color.fromARGB(255, 0, 0, 0),
+							color: (message.fromUId == widget.myUID) ? Colors.blue : Color.fromARGB(255, 0, 0, 0),
 							borderRadius: BorderRadius.circular(25),
 						),
 						child: Column(
-              crossAxisAlignment: message.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment: (message.fromUId == widget.myUID) ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
                 Text(message.msg),
                 Text(DateTime.fromMillisecondsSinceEpoch(message.timeStamp).toString(),
@@ -95,29 +99,40 @@ class _ChatPageState extends State<ChatPage>
 		return Scaffold(
 			appBar: 
 				AppBar(
-					title: Row(
-						children: [
-							Icon(
-								Icons.circle,
-								size: 10,
-								color: widget.user.hops < 2 ? Colors.green : widget.user.hops < 4 ? Colors.amber : Colors.red,
-							),
-							Flexible(
-								fit: FlexFit.tight,
-								child: Column(
-									children: [
-										Text(widget.user.dispName),
-										Text(
-											widget.user.uid,
-											style: TextStyle(
-												fontSize: 9,
-											),
-										),
-									],
-								),
-							),
-						],
-					),
+					title: ValueListenableBuilder<Map<String,User>>(
+            valueListenable: ConnectionManager.instance.connectedNodes,
+            builder: (context,nodesMap,child) {
+              User? liveUser = nodesMap[widget.user.uid];
+              Color statusColor = Colors.red;
+              if (liveUser != null)
+              {
+                statusColor = liveUser.hops < 2 ? Colors.green : liveUser.hops < 4 ? Colors.amber : Colors.red;
+              }
+              return Row(
+                children: [
+                  Icon(
+                    Icons.circle,
+                    size: 10,
+                    color: statusColor,
+                  ),
+                  Flexible(
+                    fit: FlexFit.tight,
+                    child: Column(
+                      children: [
+                        Text(widget.user.dispName),
+                        Text(
+                          widget.user.uid,
+                          style: TextStyle(
+                            fontSize: 9,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            }
+          )
 				),
 			body: 
 				Column(
@@ -159,19 +174,22 @@ class _ChatPageState extends State<ChatPage>
                         final text = messageController.text;
                         if (text.isNotEmpty)
                         {
+                          DatabaseHelper.instance.insertContact(widget.user.uid, widget.user.dispName);
                           String msgId = uuid.v7();
                           int timeStamp = DateTime.now().millisecondsSinceEpoch;
-                          ConnectionManager.instance.sendMessage(text,widget.user.uid,msgId,timeStamp);
+                          ConnectionManager.instance.sendMessage(text,widget.myUID,widget.user.uid,msgId,timeStamp);
 
-                          setState(() {
-                            _messages.add(
-                              Message(
+                          Message newMsg = Message(
                                 msgId: msgId,
+                                fromUId: widget.myUID,
                                 toUId: widget.user.uid,
                                 msg: text,
-                                isMe: true,
                                 timeStamp: timeStamp,
-                              )
+                              );
+                          DatabaseHelper.instance.insertMessage(newMsg);
+                          setState(() {
+                            _messages.add(
+                              newMsg
                             );
                           });
                         }
