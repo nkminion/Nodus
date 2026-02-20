@@ -49,7 +49,7 @@ class _NavigationPageState extends State<NavigationPage>
 								child: Text(user.dispName[0]),
 							),
 							title: Text(user.dispName),
-							subtitle: Text(user.hops < 4 ? 'Connected' : 'Offline'),
+							subtitle: Text(user.hops < 4 ? 'Connected (${user.hops} hops)' : 'Offline'),
 							trailing: Icon(
 								Icons.circle,
 								color:	user.hops < 2 ? Colors.green : user.hops < 4 ? Colors.amber : Colors.red,

@@ -21,13 +21,14 @@ class Message
   final String toUId;
   final String msg;
   final int timeStamp;
+  int status;
 
-  Message({required this.msgId, required this.fromUId, required this.toUId, required this.msg, required this.timeStamp});
+  Message({required this.msgId, required this.fromUId, required this.toUId, required this.msg, required this.timeStamp, this.status = 0});
 
   factory Message.fromJson(Map<String,dynamic> map)
   {
     print("Msg database Keys: ${map.keys}");
-    return Message(msgId: map['MsgID'], fromUId:map['FromUID'] ,toUId: map['ToUID'], msg: map['Msg'], timeStamp: map['TimeStamp']);
+    return Message(msgId: map['MsgID'], fromUId:map['FromUID'] ,toUId: map['ToUID'], msg: map['Msg'], timeStamp: map['TimeStamp'], status: map['Status']);
   }
 
   Map<String,dynamic> toMap()
@@ -38,6 +39,7 @@ class Message
       'ToUID':toUId,
       'Msg':msg,
       'TimeStamp':timeStamp,
+      'Status':status,
     };
   }
 }

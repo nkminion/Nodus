@@ -22,8 +22,9 @@ class _ChatPageState extends State<ChatPage>
 
   final TextEditingController messageController = TextEditingController();
 
-  final List<Message> _messages = [];
+  final Map<String,Message> _messages = {};
   StreamSubscription? _msgSubscription;
+  StreamSubscription? _statusSubscription;
 
   @override
   void initState()
@@ -31,7 +32,7 @@ class _ChatPageState extends State<ChatPage>
     super.initState();
 
     () async {
-      List<Message> fetchedHist = await DatabaseHelper.instance.fetchMessages(widget.myUID,widget.user.uid);
+      Map<String,Message> fetchedHist = await DatabaseHelper.instance.fetchMessages(widget.myUID,widget.user.uid);
       if (mounted)
       {
         print('Message history length: ${fetchedHist.length}');
@@ -50,9 +51,21 @@ class _ChatPageState extends State<ChatPage>
         {
           print('Refreshing...');
           setState(() {
-            _messages.add(msg);
+            _messages[msg.msgId] = msg;
           });
           print('Added...');
+        }
+      }
+    });
+
+    _statusSubscription = ConnectionManager.instance.ackStream.listen((msgId){
+      if (_messages.containsKey(msgId))
+      {
+        if (mounted)
+        {
+          setState(() {
+            _messages[msgId]!.status = 1;
+          });
         }
       }
     });
@@ -79,10 +92,15 @@ class _ChatPageState extends State<ChatPage>
 						child: Column(
               crossAxisAlignment: (message.fromUId == widget.myUID) ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
-                Text(message.msg),
+                Text(message.msg,
+                  style: TextStyle(
+                    color: (message.status == 1) ? Color.fromARGB(255, 214, 237, 255) : Color.fromARGB(127, 214, 237, 255),
+                  ),
+                ),
                 Text(DateTime.fromMillisecondsSinceEpoch(message.timeStamp).toString(),
                   style: TextStyle(
                     fontSize: 10,
+                    color: (message.status == 1) ? Color.fromARGB(255, 214, 237, 255) : Color.fromARGB(127, 214, 237, 255),
                   ),
                 )
               ],
@@ -138,7 +156,7 @@ class _ChatPageState extends State<ChatPage>
 				Column(
 					children: [
 						Expanded(
-							child: renderMessages(_messages),
+							child: renderMessages(_messages.values.toList()),
 						),
 						Container(
 							padding: EdgeInsets.only(left:10,right:10,top: 24,bottom: 50),
@@ -188,9 +206,7 @@ class _ChatPageState extends State<ChatPage>
                               );
                           DatabaseHelper.instance.insertMessage(newMsg);
                           setState(() {
-                            _messages.add(
-                              newMsg
-                            );
+                            _messages[newMsg.msgId] = newMsg;
                           });
                         }
                         messageController.clear();
@@ -210,6 +226,7 @@ class _ChatPageState extends State<ChatPage>
   {
     _msgSubscription?.cancel();
     messageController.dispose();
+    _statusSubscription?.cancel();
     super.dispose();
   }
 }

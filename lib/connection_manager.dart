@@ -27,6 +27,9 @@ class ConnectionManager
   final StreamController<Message> _messageStreamController = StreamController.broadcast();
   Stream<Message> get messageStream => _messageStreamController.stream;
 
+  final StreamController<String> _ackStreamController = StreamController.broadcast();
+  Stream<String> get ackStream => _ackStreamController.stream;
+
   Set<String> idCheck = {};
   List<String> idList = [];
   int idMaxSize = 10000;
@@ -206,6 +209,14 @@ class ConnectionManager
       'hops':0,
     };
 
+    idCheck.add(packet['id']);
+    idList.add(packet['id']);
+    if (idList.length >= idMaxSize)
+    {
+      idCheck.remove(idList.first);
+      idList.removeAt(0);
+    }
+
     String jsonMsg = jsonEncode(packet);
     Uint8List bytes = Uint8List.fromList(utf8.encode(jsonMsg));
 
@@ -339,6 +350,33 @@ class ConnectionManager
             }
           }
         }
+        else if (type == 'ack')
+        {
+          String receiver = packet['to'];
+          if (receiver == myUID)
+          {
+            DatabaseHelper.instance.updateStatus(packet['msgId']);
+            _ackStreamController.add(packet['msgId']);
+          }
+          else
+          {
+            print('Ignoring ack from $endPointId, need to propagate (I am $myUID)');
+            packet['hops'] += 1;
+            if (packet['hops'] < 5)
+            {
+              String jsonMsg = jsonEncode(packet);
+              Uint8List bytes = Uint8List.fromList(utf8.encode(jsonMsg));
+
+              for (User user in connectedNodes.value.values)
+              {
+                if (user.endPointId != null && user.endPointId != endPointId)
+                {
+                  nearby.sendBytesPayload(user.endPointId!, bytes);
+                }
+              }
+            }
+          }
+        }
         else if (type == 'message')
         {
           bool connected = connectedNodes.value.values.any((u) => u.endPointId == endPointId);
@@ -351,9 +389,35 @@ class ConnectionManager
               String senderId = packet['from'];
               String senderName = connectedNodes.value[senderId]?.dispName ?? 'Unknown Node';
               DatabaseHelper.instance.insertContact(senderId, senderName);
-              Message incomingMsg = Message(msgId: packet['id'], fromUId: packet['from'], toUId: packet['to'], msg: msg, timeStamp: packet['timeStamp']);
+              Message incomingMsg = Message(msgId: packet['id'], fromUId: packet['from'], toUId: packet['to'], msg: msg, timeStamp: packet['timeStamp'], status: 1);
               DatabaseHelper.instance.insertMessage(incomingMsg);
               _messageStreamController.add(incomingMsg);
+              Map<String,dynamic> ackPacket = {
+                'id':uuid.v7(),
+                'type':'ack',
+                'msgId':packet['id'],
+                'to':packet['from'],
+                'hops':0,
+              };
+
+              idCheck.add(ackPacket['id']);
+              idList.add(ackPacket['id']);
+              if (idList.length >= idMaxSize)
+              {
+                idCheck.remove(idList.first);
+                idList.removeAt(0);
+              }
+
+              String jsonMsg = jsonEncode(ackPacket);
+              Uint8List bytes = Uint8List.fromList(utf8.encode(jsonMsg));
+
+              for (User user in connectedNodes.value.values)
+              {
+                if (user.endPointId != null)
+                {
+                  nearby.sendBytesPayload(user.endPointId!, bytes);
+                }
+              }
             }
             else
             {

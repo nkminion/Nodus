@@ -56,6 +56,7 @@ class DatabaseHelper
         ToUID TEXT,
         Msg TEXT,
         TimeStamp INTEGER,
+        Status INTEGER,
         FOREIGN KEY (ToUID) REFERENCES Contacts (UID),
         FOREIGN KEY (FromUID) REFERENCES Contacts (UID)
       )
@@ -88,7 +89,19 @@ class DatabaseHelper
     );
   }
 
-  Future<List<Message>> fetchMessages(String myUID, String receiverUID) async
+  Future updateStatus(String msgID) async
+  {
+    Database db = await database;
+
+    await db.update(
+      'Messages',
+      {'Status':1},
+      where: 'MsgID = ?',
+      whereArgs: [msgID],
+    );
+  }
+
+  Future<Map<String,Message>> fetchMessages(String myUID, String receiverUID) async
   {
     Database db = await database;
 
@@ -99,10 +112,11 @@ class DatabaseHelper
       orderBy: 'TimeStamp',
     );
 
-    List<Message> messageHistory = [];
+    Map<String,Message> messageHistory = {};
     for (Map<String,dynamic> histItem in historyQuery)
     {
-      messageHistory.add(Message.fromJson(histItem));
+      Message msg = Message.fromJson(histItem);
+      messageHistory[msg.msgId] = msg;
     }
     return messageHistory;
   }

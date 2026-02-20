@@ -26,6 +26,4 @@ Media support
 
 Background service for uninterrupted flow of packets
 
-Delivery receipts
-
 App Logo
