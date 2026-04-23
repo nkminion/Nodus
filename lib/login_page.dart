@@ -1,19 +1,33 @@
 import 'package:flutter/material.dart';
 import 'navigation_page.dart';
 import 'connection_manager.dart';
+import 'crypto_helper.dart';
 
-class LoginPage extends StatelessWidget
+class LoginPage extends StatefulWidget
 {
 	const LoginPage({super.key, required this.title});
 	final String title;
 
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage>
+{
+  @override
+  void initState()
+  {
+    super.initState();
+  }
+
 	@override
 	Widget build(BuildContext context)
 	{
+    bool isProcessing = false;
     final textControl = TextEditingController();
 		return Scaffold(
 			appBar: AppBar(
-				title: Center(child:Text(title)),
+				title: Center(child:Text(widget.title)),
 				backgroundColor: Colors.black,
 				foregroundColor: const Color.fromARGB(255, 214, 237, 255),
 			),
@@ -50,17 +64,28 @@ class LoginPage extends StatelessWidget
 						SizedBox(
 							width: 150,
 							child: ElevatedButton(
-								onPressed: () async
+								// ignore: dead_code
+								onPressed: isProcessing ? null : () async
 								{
-									if (textControl.text != "")
-									{
-                    await ConnectionManager.instance.loadUID();
-										Navigator.of(context).push(
-											MaterialPageRoute<void>(
-											builder: (context) => NavigationPage(dispName: textControl.text,myUID:ConnectionManager.instance.myUID!)
-											)
-										);
-									}
+                  setState(() => isProcessing = true);
+                  try
+                  {
+                    if (textControl.text != "")
+                    {
+                      await ConnectionManager.instance.loadUID();
+                      await CryptoHelper.instance.initOrCreate();
+                      if (!context.mounted) return;
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                        builder: (context) => NavigationPage(dispName: textControl.text,myUID:ConnectionManager.instance.myUID!)
+                        )
+                      );
+                    }
+                  }
+                  finally
+                  {
+                    if (mounted) setState(() => isProcessing = false);
+                  }
 								},
 								style: ElevatedButton.styleFrom(
 									backgroundColor: Colors.black,

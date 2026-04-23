@@ -4,13 +4,15 @@ class User
   String dispName;
   int hops;
   String? endPointId;
+  String? publicKey;
+  int lastSeen;
 
-  User({required this.uid, required this.dispName, this.hops = 5, this.endPointId});
+  User({required this.uid, required this.dispName, this.hops = 5, this.endPointId, this.publicKey, int? lastSeen,}) : lastSeen = lastSeen ?? DateTime.now().millisecondsSinceEpoch;
 
   factory User.fromJson(Map<String,dynamic> map)
   {
     print("User database Keys: ${map.keys}");
-    return User(uid: map['UID'], dispName: map['DispName']);
+    return User(uid: map['UID'], dispName: map['DispName'], publicKey: map['PublicKey']);
   }
 }
 
