@@ -30,12 +30,17 @@ class DatabaseHelper
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
       onCreate: (db, version) async {
         await _createDB(db, version);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('ALTER TABLE Contacts ADD COLUMN PublicKey TEXT');
+        }
       },
     );
   }
@@ -45,7 +50,8 @@ class DatabaseHelper
     await db.execute('''
       CREATE TABLE Contacts (
         UID TEXT PRIMARY KEY,
-        DispName Text
+        DispName Text,
+        PublicKey TEXT
       )
     ''');
 
@@ -63,18 +69,27 @@ class DatabaseHelper
     ''');
   }
 
-  Future insertContact(String uid,String dispName) async
+  Future insertContact(String uid,String dispName, {String? publicKey}) async
   {
     Database db = await database;
 
-    await db.insert(
-      'Contacts',
-      {
-        'UID':uid,
-        'DispName':dispName,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    User? existing = await fetchContact(uid);
+    if (existing != null) {
+      Map<String, dynamic> updateData = {'DispName': dispName};
+      if (publicKey != null) {
+        updateData['PublicKey'] = publicKey;
+      }
+      await db.update('Contacts', updateData, where: 'UID = ?', whereArgs: [uid]);
+    } else {
+      Map<String, dynamic> row = {
+        'UID': uid,
+        'DispName': dispName,
+      };
+      if (publicKey != null) {
+        row['PublicKey'] = publicKey;
+      }
+      await db.insert('Contacts', row, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
   }
   
 
@@ -137,5 +152,21 @@ class DatabaseHelper
       contacts.add(User.fromJson(contact));
     }
     return contacts;
+  }
+
+  Future<User?> fetchContact(String uid) async
+  {
+    Database db = await database;
+
+    List<Map<String,dynamic>> contactQuery = await db.query(
+      'Contacts',
+      where: 'UID = ?',
+      whereArgs: [uid],
+    );
+
+    if (contactQuery.isNotEmpty) {
+      return User.fromJson(contactQuery.first);
+    }
+    return null;
   }
 }

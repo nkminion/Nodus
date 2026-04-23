@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'database_helper.dart';
+import 'crypto_helper.dart';
 
 class ConnectionManager
 {
@@ -72,7 +73,7 @@ class ConnectionManager
       Permission.nearbyWifiDevices,
     ].request();
 
-    if (statuses[Permission.location]!.isGranted && statuses[Permission.bluetoothAdvertise]!.isGranted && statuses[Permission.bluetoothConnect]!.isGranted && statuses[Permission.nearbyWifiDevices]!.isGranted)
+    if (statuses.values.every((status) => status.isGranted))
     {
       _startAdvertising(userName);
       _startDiscovery(userName);
@@ -86,6 +87,17 @@ class ConnectionManager
       _presenceTimer?.cancel();
       _presenceTimer = Timer.periodic(Duration(seconds: 10), (timer){
         _broadcastPresence(1,userName);
+      });
+
+      Timer.periodic(Duration(seconds:10), (timer){
+        int currTime = DateTime.now().millisecondsSinceEpoch;
+        Map<String,User> currentMap = Map.from(connectedNodes.value);
+        currentMap.removeWhere((uid,user) => (currTime - user.lastSeen) > 20000);
+
+        if (currentMap.length != connectedNodes.value.length)
+        {
+          connectedNodes.value = currentMap;
+        }
       });
     }
     else
@@ -197,14 +209,24 @@ class ConnectionManager
     print('Disconnected: $id');
   }
 
-  void sendMessage(String msg, String senderId, String receiverId, String msgId, int timeStamp)
+  Future<void> sendMessage(String msg, String senderId, String receiverId, String msgId, int timeStamp) async
   {
+    User? peer = await DatabaseHelper.instance.fetchContact(receiverId);
+    if (peer == null || peer.publicKey == null) {
+      print('Cannot send message: no public key for $receiverId');
+      return;
+    }
+
+    Map<String, String> encrypted = await CryptoHelper.instance.encryptMessage(msg, peer.publicKey!);
+
     Map<String,dynamic> packet = {
       'type':'message',
       'id':msgId,
       'from':senderId,
       'to':receiverId,
-      'msg':msg,
+      'msg':encrypted['ciphertext'],
+      'nonce':encrypted['nonce'],
+      'mac':encrypted['mac'],
       'timeStamp':timeStamp,
       'hops':0,
     };
@@ -232,12 +254,13 @@ class ConnectionManager
   void dispose()
   {
     _discoveryTimer?.cancel();
+    _presenceTimer?.cancel();
     nearby.stopAdvertising();
     nearby.stopDiscovery();
     connectedNodes.value = {};
   }
 
-  void _onPayLoadReceived(String endPointId,Payload payload,String userName)
+  void _onPayLoadReceived(String endPointId,Payload payload,String userName) async
   {
     if (payload.type == PayloadType.BYTES)
     {
@@ -264,12 +287,16 @@ class ConnectionManager
         {
           String receiverId = packet['uuid'];
           String dispName = packet['name'];
+          String? publicKey = packet['publicKey'];
+
+          await DatabaseHelper.instance.insertContact(receiverId, dispName, publicKey: publicKey);
 
           User newNode = User(
             uid: receiverId,
             dispName: dispName,
             endPointId: endPointId,
             hops: 1,
+            publicKey: publicKey,
           );
 
           Map<String,User> currentMap = Map.from(connectedNodes.value);
@@ -283,6 +310,7 @@ class ConnectionManager
           Map<String,User> currentMap = Map.from(connectedNodes.value);
 
           int packetTTL = packet['ttl'];
+          int currTime = DateTime.now().millisecondsSinceEpoch;
 
           for (Map<String,dynamic> entry in packet['directory'])
           {
@@ -291,24 +319,27 @@ class ConnectionManager
             {
               continue;
             }
-            else if (!currentMap.containsKey(entry['uid']))
+            if (entry['hops'] <= packetTTL)
+            {
+              directory.add(
+                {
+                  'uid':entry['uid'],
+                  'name':entry['name'],
+                  'hops':entry['hops'],
+                  'publicKey':entry['publicKey'],
+                }
+              );
+            }
+            if (!currentMap.containsKey(entry['uid']))
             {
               User newnode = User(
                 uid: entry['uid'],
                 dispName: entry['name'],
                 endPointId: null,
                 hops: entry['hops'],
+                publicKey: entry['publicKey'],
+                lastSeen: currTime,
               );
-              if (entry['hops'] <= packetTTL)
-              {
-                directory.add(
-                  {
-                    'uid':entry['uid'],
-                    'name':entry['name'],
-                    'hops':entry['hops'],
-                  }
-                );
-              }
               currentMap[entry['uid']] = newnode;
             }
             else if (entry['hops'] < currentMap[entry['uid']]!.hops)
@@ -319,18 +350,14 @@ class ConnectionManager
                 dispName: oldnode.dispName,
                 endPointId: oldnode.endPointId,
                 hops: entry['hops'],
+                publicKey: entry['publicKey'],
+                lastSeen: currTime,
               );
               currentMap[entry['uid']] = newnode;
-              if (entry['hops'] <= packetTTL)
-              {
-                directory.add(
-                  {
-                    'uid':entry['uid'],
-                    'name':entry['name'],
-                    'hops':entry['hops'],
-                  }
-                );
-              }
+            }
+            else
+            {
+              currentMap[entry['uid']]!.lastSeen = currTime;
             }
           }
           connectedNodes.value = currentMap;
@@ -383,13 +410,28 @@ class ConnectionManager
           if (connected)
           {
             String receiver = packet['to'];
-            String msg = packet['msg'];
             if (receiver == myUID)
             {
               String senderId = packet['from'];
               String senderName = connectedNodes.value[senderId]?.dispName ?? 'Unknown Node';
-              DatabaseHelper.instance.insertContact(senderId, senderName);
-              Message incomingMsg = Message(msgId: packet['id'], fromUId: packet['from'], toUId: packet['to'], msg: msg, timeStamp: packet['timeStamp'], status: 1);
+              await DatabaseHelper.instance.insertContact(senderId, senderName);
+
+              User? sender = await DatabaseHelper.instance.fetchContact(senderId);
+              if (sender == null || sender.publicKey == null) {
+                 print("Cannot decrypt message: No public key for $senderId");
+                 return;
+              }
+
+              String decryptedMsg = "";
+              try {
+                decryptedMsg = await CryptoHelper.instance.decryptMessage(
+                    packet['msg'], packet['nonce'], packet['mac'], sender.publicKey!);
+              } catch (e) {
+                print("Decryption failed: $e");
+                return;
+              }
+
+              Message incomingMsg = Message(msgId: packet['id'], fromUId: packet['from'], toUId: packet['to'], msg: decryptedMsg, timeStamp: packet['timeStamp'], status: 1);
               DatabaseHelper.instance.insertMessage(incomingMsg);
               _messageStreamController.add(incomingMsg);
               Map<String,dynamic> ackPacket = {
@@ -454,10 +496,11 @@ class ConnectionManager
       'type':'handshake',
       'uuid':myUID,
       'name':userName,
+      'publicKey': CryptoHelper.instance.publicKeyBase64,
     };
 
     String jsonPacket = jsonEncode(handshake);
-    Uint8List bytes = utf8.encode(jsonPacket);
+    Uint8List bytes = Uint8List.fromList(utf8.encode(jsonPacket));
     nearby.sendBytesPayload(endPointId, bytes);
   }
 
@@ -472,6 +515,7 @@ class ConnectionManager
           'uid':user.uid,
           'name':user.dispName,
           'hops':user.hops,
+          'publicKey':user.publicKey,
         }
       );
     }
@@ -480,6 +524,7 @@ class ConnectionManager
         'uid':myUID,
         'name':userName,
         'hops':0,
+        'publicKey': CryptoHelper.instance.publicKeyBase64,
       }
     );
 
