@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'package:cryptography/cryptography.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'database_helper.dart';
 
-class CryptoHelper {
+class CryptoHelper 
+{
   static final CryptoHelper instance = CryptoHelper._();
   CryptoHelper._();
 
@@ -11,15 +13,17 @@ class CryptoHelper {
 
   String? get publicKeyBase64 => _publicKeyBase64;
 
-  Future<void> initOrCreate() async {
+  Future<void> initOrCreate() async 
+  {
     final prefs = await SharedPreferences.getInstance();
     String? privKeyStr = prefs.getString('PrivKey');
     String? pubKeyStr = prefs.getString('PubKey');
 
     final algorithm = X25519();
 
-    if (privKeyStr == null || pubKeyStr == null) {
-      // Generate new keypair
+    if (privKeyStr == null || pubKeyStr == null) 
+    {
+      //Generate new keypair
       _keyPair = await algorithm.newKeyPair();
       final pubKey = await _keyPair!.extractPublicKey();
       
@@ -28,8 +32,10 @@ class CryptoHelper {
       final privateKeyBytes = await _keyPair!.extractPrivateKeyBytes();
       await prefs.setString('PrivKey', base64Encode(privateKeyBytes));
       await prefs.setString('PubKey', _publicKeyBase64!);
-    } else {
-      // Load existing keypair
+    } 
+    else 
+    {
+      //Load existing keypair
       final privBytes = base64Decode(privKeyStr);
       final pubBytes = base64Decode(pubKeyStr);
       
@@ -42,8 +48,10 @@ class CryptoHelper {
     }
   }
 
-  Future<SecretKey> _deriveAESKey(String peerPublicKeyBase64) async {
-    if (_keyPair == null) {
+  Future<SecretKey> _deriveAESKey(String peerPublicKeyBase64) async 
+  {
+    if (_keyPair == null) 
+    {
       throw Exception("CryptoHelper not initialized");
     }
     final peerPubBytes = base64Decode(peerPublicKeyBase64);
@@ -55,10 +63,10 @@ class CryptoHelper {
       remotePublicKey: peerPublicKey,
     );
 
-    // HKDF with SHA-256
+    //HKDF with SHA-256
     final hkdf = Hkdf(
       hmac: Hmac.sha256(),
-      outputLength: 32, // AES-GCM 256 uses 32 bytes
+      outputLength: 32, //AES-GCM 256 uses 32 bytes
     );
     
     final derivedKey = await hkdf.deriveKey(
@@ -69,37 +77,57 @@ class CryptoHelper {
     return derivedKey;
   }
 
-  Future<Map<String, String>> encryptMessage(String plaintext, String peerPublicKeyBase64) async {
+  Future<Map<String, String>> encryptMessage(Map<String,dynamic> payload, String peerPublicKeyBase64) async 
+  {
     final derivedKey = await _deriveAESKey(peerPublicKeyBase64);
     final aesGcm = AesGcm.with256bits();
     
     final secretBox = await aesGcm.encrypt(
-      utf8.encode(plaintext),
+      utf8.encode(jsonEncode(payload)),
       secretKey: derivedKey,
     );
 
     return {
-      'ciphertext': base64Encode(secretBox.cipherText),
+      'payload': base64Encode(secretBox.cipherText),
       'mac': base64Encode(secretBox.mac.bytes),
       'nonce': base64Encode(secretBox.nonce),
     };
   }
 
-  Future<String> decryptMessage(String ciphertextBase64, String nonceBase64, String macBase64, String peerPublicKeyBase64) async {
-    final derivedKey = await _deriveAESKey(peerPublicKeyBase64);
-    final aesGcm = AesGcm.with256bits();
-    
-    final secretBox = SecretBox(
-      base64Decode(ciphertextBase64),
-      nonce: base64Decode(nonceBase64),
-      mac: Mac(base64Decode(macBase64)),
-    );
+  Future<Map<String,dynamic>?> decryptMessage(String payload, String nonceBase64, String macBase64) async 
+  {
+    Map<String,String> contactKeys = await DatabaseHelper.instance.fetchKeys();
 
-    final cleartextBytes = await aesGcm.decrypt(
-      secretBox,
-      secretKey: derivedKey,
-    );
+    for (String key in contactKeys.keys)
+    {
+      try
+      {
+        final derivedKey = await _deriveAESKey(key);
+        final aesGcm = AesGcm.with256bits();
+        
+        final secretBox = SecretBox(
+          base64Decode(payload),
+          nonce: base64Decode(nonceBase64),
+          mac: Mac(base64Decode(macBase64)),
+        );
 
-    return utf8.decode(cleartextBytes);
+        final decryptedPayload = await aesGcm.decrypt(
+          secretBox,
+          secretKey: derivedKey,
+        );
+
+        final payloadJson = json.decode(utf8.decode(decryptedPayload));
+
+        if (payloadJson['from'] == contactKeys[key])
+        {
+          return payloadJson;
+        }
+      }
+      catch (keyError)
+      {
+        continue;
+      }
+    }
+    return null;
   }
 }

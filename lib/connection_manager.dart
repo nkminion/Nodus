@@ -86,7 +86,7 @@ class ConnectionManager
 
       _presenceTimer?.cancel();
       _presenceTimer = Timer.periodic(Duration(seconds: 10), (timer){
-        _broadcastPresence(1,userName);
+        _broadcastPresence(5,userName);
       });
 
       Timer.periodic(Duration(seconds:10), (timer){
@@ -217,17 +217,21 @@ class ConnectionManager
       return;
     }
 
-    Map<String, String> encrypted = await CryptoHelper.instance.encryptMessage(msg, peer.publicKey!);
+    Map<String,dynamic> payload = {
+      'from':senderId,
+      'msg':msg,
+      'timeStamp':timeStamp,
+    };
+
+    Map<String, String> encrypted = await CryptoHelper.instance.encryptMessage(payload, peer.publicKey!);
 
     Map<String,dynamic> packet = {
       'type':'message',
       'id':msgId,
-      'from':senderId,
       'to':receiverId,
-      'msg':encrypted['ciphertext'],
+      'payload':encrypted['payload'],
       'nonce':encrypted['nonce'],
       'mac':encrypted['mac'],
-      'timeStamp':timeStamp,
       'hops':0,
     };
 
@@ -264,25 +268,25 @@ class ConnectionManager
   {
     if (payload.type == PayloadType.BYTES)
     {
-      String jsonPacket = utf8.decode(payload.bytes!);
-      Map<String,dynamic> packet = jsonDecode(jsonPacket);
-      List<Map<String,dynamic>> directory = [];
-      String id = packet['id'];
-      if (idCheck.contains(id))
-      {
-        return;
-      }
-      idCheck.add(id);
-      idList.add(id);
-      if (idList.length >= idMaxSize)
-      {
-        idCheck.remove(idList.first);
-        idList.removeAt(0);
-      }
-      String type = packet['type'];
-      print('Packet type: $type');
       try
       {
+        String jsonPacket = utf8.decode(payload.bytes!);
+        Map<String,dynamic> packet = jsonDecode(jsonPacket);
+        List<Map<String,dynamic>> directory = [];
+        String id = packet['id'];
+        if (idCheck.contains(id))
+        {
+          return;
+        }
+        idCheck.add(id);
+        idList.add(id);
+        if (idList.length >= idMaxSize)
+        {
+          idCheck.remove(idList.first);
+          idList.removeAt(0);
+        }
+        String type = packet['type'];
+        print('Packet type: $type');
         if (type == 'handshake')
         {
           String receiverId = packet['uuid'];
@@ -382,8 +386,16 @@ class ConnectionManager
           String receiver = packet['to'];
           if (receiver == myUID)
           {
-            DatabaseHelper.instance.updateStatus(packet['msgId']);
-            _ackStreamController.add(packet['msgId']);
+            Map<String,dynamic>? ackDecrypt = await CryptoHelper.instance.decryptMessage(
+              packet['payload'],
+              packet['nonce'],
+              packet['mac'],
+            );
+            if (ackDecrypt != null)
+            {
+              DatabaseHelper.instance.updateStatus(ackDecrypt['msgId']);
+              _ackStreamController.add(ackDecrypt['msgId']); 
+            }
           }
           else
           {
@@ -412,53 +424,74 @@ class ConnectionManager
             String receiver = packet['to'];
             if (receiver == myUID)
             {
-              String senderId = packet['from'];
-              String senderName = connectedNodes.value[senderId]?.dispName ?? 'Unknown Node';
-              await DatabaseHelper.instance.insertContact(senderId, senderName);
+              Map<String,dynamic>? payload = {};
+              try
+              {
+                payload = await CryptoHelper.instance.decryptMessage(
+                    packet['payload'],
+                    packet['nonce'],
+                    packet['mac'],
+                );
+                if (payload != null)
+                {
+                  String senderId = payload['from'];
+                  String senderName = connectedNodes.value[senderId]?.dispName ?? 'Unknown Node';
+                  await DatabaseHelper.instance.insertContact(senderId, senderName, publicKey: connectedNodes.value[senderId]?.publicKey);
 
-              User? sender = await DatabaseHelper.instance.fetchContact(senderId);
-              if (sender == null || sender.publicKey == null) {
-                 print("Cannot decrypt message: No public key for $senderId");
-                 return;
-              }
+                  Message incomingMsg = Message(msgId: packet['id'], fromUId: payload['from'], toUId: packet['to'], msg: payload['msg'], timeStamp: payload['timeStamp'], status: 1);
+                  DatabaseHelper.instance.insertMessage(incomingMsg);
+                  _messageStreamController.add(incomingMsg);
 
-              String decryptedMsg = "";
-              try {
-                decryptedMsg = await CryptoHelper.instance.decryptMessage(
-                    packet['msg'], packet['nonce'], packet['mac'], sender.publicKey!);
-              } catch (e) {
+                  String? senderKey = connectedNodes.value[senderId]?.publicKey;
+
+                  if (senderKey == null)
+                  {
+                    Map<String,String> dbKeys = await DatabaseHelper.instance.fetchKeys();
+                    senderKey = dbKeys[senderId];
+                  }
+
+                  if (senderKey == null) return;
+
+                  Map<String,dynamic> ackPayload = await CryptoHelper.instance.encryptMessage(
+                    {
+                      'from':myUID,
+                      'msgId':packet['id'],
+                    }, senderKey);
+
+                  Map<String,dynamic> ackPacket = {
+                    'id':uuid.v7(),
+                    'type':'ack',
+                    'payload':ackPayload['payload'],
+                    'nonce':ackPayload['nonce'],
+                    'mac':ackPayload['mac'],
+                    'to':payload['from'],
+                    'hops':0,
+                  };
+
+                  idCheck.add(ackPacket['id']);
+                  idList.add(ackPacket['id']);
+                  if (idList.length >= idMaxSize)
+                  {
+                    idCheck.remove(idList.first);
+                    idList.removeAt(0);
+                  }
+
+                  String jsonMsg = jsonEncode(ackPacket);
+                  Uint8List bytes = Uint8List.fromList(utf8.encode(jsonMsg));
+
+                  for (User user in connectedNodes.value.values)
+                  {
+                    if (user.endPointId != null)
+                    {
+                      nearby.sendBytesPayload(user.endPointId!, bytes);
+                    }
+                  }
+                }
+              } 
+              catch (e) 
+              {
                 print("Decryption failed: $e");
                 return;
-              }
-
-              Message incomingMsg = Message(msgId: packet['id'], fromUId: packet['from'], toUId: packet['to'], msg: decryptedMsg, timeStamp: packet['timeStamp'], status: 1);
-              DatabaseHelper.instance.insertMessage(incomingMsg);
-              _messageStreamController.add(incomingMsg);
-              Map<String,dynamic> ackPacket = {
-                'id':uuid.v7(),
-                'type':'ack',
-                'msgId':packet['id'],
-                'to':packet['from'],
-                'hops':0,
-              };
-
-              idCheck.add(ackPacket['id']);
-              idList.add(ackPacket['id']);
-              if (idList.length >= idMaxSize)
-              {
-                idCheck.remove(idList.first);
-                idList.removeAt(0);
-              }
-
-              String jsonMsg = jsonEncode(ackPacket);
-              Uint8List bytes = Uint8List.fromList(utf8.encode(jsonMsg));
-
-              for (User user in connectedNodes.value.values)
-              {
-                if (user.endPointId != null)
-                {
-                  nearby.sendBytesPayload(user.endPointId!, bytes);
-                }
               }
             }
             else

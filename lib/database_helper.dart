@@ -10,7 +10,7 @@ class DatabaseHelper
   static final DatabaseHelper instance = DatabaseHelper._();
   DatabaseHelper._();
 
-  static Database? _database;
+  Future<Database>? _database;
   Future<Database> get database async
   {
     if (_database != null)
@@ -18,7 +18,7 @@ class DatabaseHelper
       return _database!;
     }
     
-    _database = await _initDB('nodus.db');
+    _database = _initDB('nodus.db');
 
     return _database!;
   }
@@ -168,5 +168,28 @@ class DatabaseHelper
       return User.fromJson(contactQuery.first);
     }
     return null;
+  }
+
+  Future<Map<String,String>> fetchKeys() async
+  {
+    Database db = await database;
+
+    List<Map<String,dynamic>> keyQuery = await db.query(
+      'Contacts',
+      columns: ['UID','PublicKey'],
+    );
+
+    Map<String,String> res = {};
+
+    if (keyQuery.isNotEmpty)
+    {
+      for (Map<String,dynamic> key in keyQuery)
+      {
+        res[key['PublicKey']] = key['UID'];
+      }
+      return res;
+    }
+
+    return {};
   }
 }
