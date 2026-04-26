@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:nodus/connection_manager.dart';
+import 'package:intl/intl.dart';
 import 'util_classes.dart';
 import 'package:uuid/uuid.dart';
 import 'database_helper.dart';
@@ -97,7 +98,7 @@ class _ChatPageState extends State<ChatPage>
                     color: (message.status == 1) ? Color.fromARGB(255, 214, 237, 255) : Color.fromARGB(127, 214, 237, 255),
                   ),
                 ),
-                Text(DateTime.fromMillisecondsSinceEpoch(message.timeStamp).toString(),
+                Text(DateFormat('dd-MM-yyyy | HH:mm:ss').format(DateTime.fromMillisecondsSinceEpoch(message.timeStamp)),
                   style: TextStyle(
                     fontSize: 10,
                     color: (message.status == 1) ? Color.fromARGB(255, 214, 237, 255) : Color.fromARGB(127, 214, 237, 255),
@@ -124,7 +125,7 @@ class _ChatPageState extends State<ChatPage>
               Color statusColor = Colors.red;
               if (liveUser != null)
               {
-                statusColor = liveUser.hops < 2 ? Colors.green : liveUser.hops < 4 ? Colors.amber : Colors.red;
+                statusColor = liveUser.hops < 2 ? Colors.green : liveUser.hops < 5 ? Colors.amber : Colors.red;
               }
               return Row(
                 children: [
@@ -175,6 +176,7 @@ class _ChatPageState extends State<ChatPage>
                         ),
                         hintText: 'Message',
                       ),
+                      maxLength: 4000,
 										)
 									),
 									Padding(

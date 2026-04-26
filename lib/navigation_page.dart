@@ -52,7 +52,7 @@ class _NavigationPageState extends State<NavigationPage>
 							subtitle: Text(user.hops < 4 ? 'Connected (${user.hops} hops)' : 'Offline'),
 							trailing: Icon(
 								Icons.circle,
-								color:	user.hops < 2 ? Colors.green : user.hops < 4 ? Colors.amber : Colors.red,
+								color:	user.hops < 2 ? Colors.green : user.hops < 5 ? Colors.amber : Colors.red,
 								size: 10,
 							),
 							onTap: (){Navigator.of(context).push(

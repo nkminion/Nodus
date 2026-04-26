@@ -70,12 +70,12 @@ class _LoginPageState extends State<LoginPage>
                   setState(() => isProcessing = true);
                   try
                   {
-                    if (textControl.text != "")
+                    if (textControl.text.trim().isNotEmpty)
                     {
                       await ConnectionManager.instance.loadUID();
                       await CryptoHelper.instance.initOrCreate();
                       if (!context.mounted) return;
-                      Navigator.of(context).push(
+                      Navigator.of(context).pushReplacement(
                         MaterialPageRoute<void>(
                         builder: (context) => NavigationPage(dispName: textControl.text,myUID:ConnectionManager.instance.myUID!)
                         )
