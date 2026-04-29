@@ -20,10 +20,19 @@ Stores chat history and contact info on your device.
 
 # Future updates:
 
-Encryption
-
 Media support
 
 Background service for uninterrupted flow of packets
 
 App Logo
+
+Double ratchet system, similar to signal
+
+Out of band verification to enable encryption of handshake packets too
+
+Storing private keys on flutter_secure_storage
+
+Logging framework and UI to let users know about errors
+
+# Contribution
+This is an open source project. Contributors are welcome.
