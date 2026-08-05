@@ -1,15 +1,20 @@
 package com.nkminion.nodus.ui
 
+import android.widget.Button
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonColors
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.MaterialTheme
@@ -18,6 +23,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RippleConfiguration
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults.topAppBarColors
 import androidx.compose.runtime.Composable
@@ -29,16 +35,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.nkminion.nodus.ui.theme.NodusTheme
 
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun LoginScreenContent(onSubmit: (String) -> Unit)
+fun NavigationPageContent(userName: String)
 {
-	var textVal by remember { mutableStateOf("") }
 	val customRipple = RippleConfiguration(color = MaterialTheme.colorScheme.secondary)
 	Scaffold(
 		topBar = {
@@ -49,55 +57,51 @@ fun LoginScreenContent(onSubmit: (String) -> Unit)
 				),
 				title = {
 					Text(
-						text = "Login Screen",
+						text = userName,
 						textAlign = TextAlign.Center,
 						modifier = Modifier
-							.fillMaxWidth(),
-						style = MaterialTheme.typography.titleLarge
+							.fillMaxWidth()
 					)
 				}
 			)
 		},
 	) { innerPadding ->
-		Column(modifier = Modifier
+		LazyColumn(modifier = Modifier
 			.padding(innerPadding)
 			.fillMaxHeight()
 			.fillMaxWidth(),
-			verticalArrangement = Arrangement.Center,
-			horizontalAlignment = Alignment.CenterHorizontally
 		) {
-			OutlinedTextField(
-				shape = RoundedCornerShape(28.dp),
-				value = textVal,
-				onValueChange = { newText: String ->
-					textVal = newText
-				},
-				placeholder = {Text("Display Name")},
-				label = {Text("Display Name")},
-				singleLine = true
-			)
-			Spacer(modifier = Modifier.height(10.dp))
-			CompositionLocalProvider(LocalRippleConfiguration provides customRipple)
-			{
-				OutlinedButton(
-					onClick = {
-						if (textVal.isNotBlank()) {
-							onSubmit(textVal)
-						}
-					},
-					border = BorderStroke(
-						width = 2.dp,
-						color = MaterialTheme.colorScheme.primary
-
-					),
-					colors = ButtonColors(
-						containerColor = MaterialTheme.colorScheme.surface,
-						contentColor = MaterialTheme.colorScheme.onSurface,
-						disabledContentColor = Color.Gray,
-						disabledContainerColor = Color.Gray,
-					)
+			item {
+				Row(
+					modifier = Modifier
+						.fillMaxWidth(),
+					horizontalArrangement = Arrangement.SpaceEvenly
 				) {
-					Text("Next")
+					CompositionLocalProvider(LocalRippleConfiguration provides customRipple)
+					{
+						TextButton(
+							onClick = { print("Clicked Nearby") },
+							modifier = Modifier.weight(1f),
+							colors = ButtonDefaults.textButtonColors(
+								containerColor = MaterialTheme.colorScheme.primaryContainer,
+								contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+							),
+							shape = RectangleShape
+						) {
+							Text("Nearby")
+						}
+						TextButton(
+							onClick = { print("Clicked History") },
+							modifier = Modifier.weight(1f),
+							colors = ButtonDefaults.textButtonColors(
+								containerColor = MaterialTheme.colorScheme.primaryContainer,
+								contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+							),
+							shape = RectangleShape
+						) {
+							Text("History")
+						}
+					}
 				}
 			}
 		}
@@ -106,9 +110,9 @@ fun LoginScreenContent(onSubmit: (String) -> Unit)
 
 @Preview(showBackground = true)
 @Composable
-fun LoginScreenPreview() {
+fun NavigationPagePreview() {
 	NodusTheme(dynamicColor = false)
 	{
-		LoginScreenContent(onSubmit = {})
+		NavigationPageContent(userName = "Minion")
 	}
 }

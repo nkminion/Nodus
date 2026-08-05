@@ -29,12 +29,12 @@ class MainActivity : ComponentActivity()
 @Composable
 fun AppRouter()
 {
-	var userName by remember { mutableStateOf<String?>(null) }
-	if (userName == null)
+	var displayName by remember { mutableStateOf<String?>(null) }
+	if (displayName == null)
 	{
 		LoginScreenContent(
 			onSubmit = { enteredName ->
-				userName = enteredName
+				displayName = enteredName
 			}
 		)
 	}
