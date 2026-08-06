@@ -93,8 +93,8 @@ fun LoginScreenContent(onSubmit: (String) -> Unit)
 					colors = ButtonColors(
 						containerColor = MaterialTheme.colorScheme.surface,
 						contentColor = MaterialTheme.colorScheme.onSurface,
-						disabledContentColor = Color.Gray,
-						disabledContainerColor = Color.Gray,
+						disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+						disabledContainerColor = MaterialTheme.colorScheme.onSurfaceVariant,
 					)
 				) {
 					Text("Next")

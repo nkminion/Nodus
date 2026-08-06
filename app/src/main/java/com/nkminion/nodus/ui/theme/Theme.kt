@@ -18,7 +18,9 @@ private val DarkColorScheme = darkColorScheme(
 	background = SpiderBlack,
 	surface = SpiderBlack,
 	onBackground = AliceBlue,
-	onSurface = AliceBlue
+	onSurface = AliceBlue,
+	onSurfaceVariant = SubtleGray,
+	outline = MutedGray
 )
 
 private val LightColorScheme = lightColorScheme(
