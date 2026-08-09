@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.activity.ComponentActivity
 import com.nkminion.nodus.ui.LoginScreenContent
+import com.nkminion.nodus.ui.NavigationScreenContent
 import com.nkminion.nodus.ui.theme.NodusTheme
 
 class MainActivity : ComponentActivity()
@@ -40,6 +41,9 @@ fun AppRouter()
 	}
 	else
 	{
-		//Home Screen
+		val userName: String = displayName ?: "placeholder"
+		NavigationScreenContent(
+			userName
+		)
 	}
 }

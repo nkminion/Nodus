@@ -56,7 +56,8 @@ fun PeerListItem(
 			contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
 			disabledContainerColor = MaterialTheme.colorScheme.onSurfaceVariant,
 			disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-		)
+		),
+		shape = RectangleShape
 	) {
 		Row(
 			modifier = Modifier
