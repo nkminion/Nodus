@@ -20,7 +20,7 @@ private val DarkColorScheme = darkColorScheme(
 	onBackground = AliceBlue,
 	onSurface = AliceBlue,
 	onSurfaceVariant = SubtleGray,
-	outline = MutedGray
+	outline = MutedGray,
 )
 
 private val LightColorScheme = lightColorScheme(
