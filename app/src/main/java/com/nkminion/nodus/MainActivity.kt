@@ -1,15 +1,15 @@
 package com.nkminion.nodus
 
 import android.os.Bundle
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.activity.ComponentActivity
+import com.nkminion.nodus.navigation.AppNavigation
 import com.nkminion.nodus.ui.LoginScreenContent
-import com.nkminion.nodus.ui.NavigationScreenContent
 import com.nkminion.nodus.ui.theme.NodusTheme
 
 class MainActivity : ComponentActivity()
@@ -42,8 +42,6 @@ fun AppRouter()
 	else
 	{
 		val userName: String = displayName ?: "placeholder"
-		NavigationScreenContent(
-			userName
-		)
+		AppNavigation(displayName = userName)
 	}
 }

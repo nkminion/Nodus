@@ -4,9 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -34,7 +36,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.nkminion.nodus.R
+import com.nkminion.nodus.data.Peer
 import com.nkminion.nodus.data.sampleMessages
+import com.nkminion.nodus.data.samplePeers
 import com.nkminion.nodus.ui.theme.NodusTheme
 
 @Composable
@@ -137,19 +141,17 @@ fun MessageInputBar(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TextScreenContent(
-	peerName: String,
-	peerUUID: String,
-	isVerified: Boolean,
-	hops: Int,
+	peer: Peer,
 	onBackClick: () -> Unit
 ) {
 	var inputText by remember { mutableStateOf("") }
 	val circleColor = when {
-		!isVerified || hops > 4 -> Color(0xFFFF0000)
-		hops > 1 -> Color(0xFFFFAE00)
+		!peer.isVerified || peer.hops > 4 -> Color(0xFFFF0000)
+		peer.hops > 1 -> Color(0xFFFFAE00)
 		else -> Color(0xFF00FF60)
 	}
 	Scaffold(
+		modifier = Modifier.imePadding(),
 		topBar = {
 			TopAppBar(
 				navigationIcon = {
@@ -180,12 +182,12 @@ fun TextScreenContent(
 							modifier = Modifier.padding(6.dp)
 						) {
 							Text(
-								text = peerName,
+								text = peer.displayName,
 								style = MaterialTheme.typography.bodyLarge,
 								color = MaterialTheme.colorScheme.onSurface
 							)
 							Text(
-								text = peerUUID,
+								text = peer.uuid,
 								style = MaterialTheme.typography.bodySmall,
 								color = MaterialTheme.colorScheme.onSurfaceVariant
 							)
@@ -197,7 +199,7 @@ fun TextScreenContent(
 		bottomBar = {
 			MessageInputBar(
 				text = inputText,
-				peerName = peerName,
+				peerName = peer.displayName,
 				onValueChange = { inputText = it },
 				onSendClick = { inputText = "" }
 			)
@@ -207,7 +209,8 @@ fun TextScreenContent(
 			modifier = Modifier
 				.padding(innerPadding)
 				.fillMaxSize(),
-			reverseLayout = true
+			reverseLayout = true,
+			contentPadding = PaddingValues(vertical = 8.dp)
 		) {
 			items(sampleMessages) {msg ->
 				TextBubble(
@@ -226,10 +229,7 @@ fun TextScreenContentPreview() {
 	NodusTheme(dynamicColor = false)
 	{
 		TextScreenContent(
-			peerName = "Peer 1",
-			peerUUID = "placeholder UUID here lol",
-			isVerified = true,
-			hops = 1,
+			peer = samplePeers[0],
 			onBackClick = {}
 		)
 	}

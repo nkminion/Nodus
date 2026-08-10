@@ -1,6 +1,7 @@
 package com.nkminion.nodus.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -32,23 +34,21 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.nkminion.nodus.data.Peer
+import com.nkminion.nodus.data.samplePeers
 import com.nkminion.nodus.ui.theme.NodusTheme
 
 @Composable
-fun PeerListItem(
-	peerName: String,
-	statusText: String = "Unverified",
-	hops: Int = 1,
-	isVerified: Boolean
-) {
-	val hopLabel = if (hops == 1) "1 hop" else "$hops hops"
+fun PeerListItem(peer: Peer, modifier: Modifier) {
+	val statusText = if (peer.isVerified) "Verified" else "Unverified"
+	val hopLabel = if (peer.hops == 1) "1 hop" else "${peer.hops} hops"
 	val circleColor = when {
-		!isVerified || hops > 4 -> Color(0xFFFF0000)
-		hops > 1 -> Color(0xFFFFAE00)
+		!peer.isVerified || peer.hops > 4 -> Color(0xFFFF0000)
+		peer.hops > 1 -> Color(0xFFFFAE00)
 		else -> Color(0xFF00FF60)
 	}
 	Card(
-		modifier = Modifier
+		modifier = modifier
 			.fillMaxWidth()
 			.padding(horizontal = 16.dp, vertical = 4.dp),
 		colors = CardColors(
@@ -69,11 +69,11 @@ fun PeerListItem(
 			Box(
 				modifier = Modifier
 					.size(10.dp)
-					.background(color= circleColor, shape = CircleShape)
+					.background(color = circleColor, shape = CircleShape)
 			)
 			Column {
 				Text(
-					text = peerName,
+					text = peer.displayName,
 					style = MaterialTheme.typography.bodyLarge,
 					color = MaterialTheme.colorScheme.onSurface
 				)
@@ -89,7 +89,7 @@ fun PeerListItem(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NavigationScreenContent(displayName: String)
+fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 {
 	val customRipple = RippleConfiguration(color = MaterialTheme.colorScheme.secondary)
 	Scaffold(
@@ -150,12 +150,12 @@ fun NavigationScreenContent(displayName: String)
 			}
 
 			//Dummies
-			items(6) { index ->
+			items(samplePeers) { peer ->
 				PeerListItem(
-					peerName = "Peer ${index+1}",
-					statusText = if (index < 5) "SAS Verified" else "Unverified",
-					hops = index+1,
-					isVerified = (index < 5)
+					peer = peer,
+					modifier = Modifier.clickable {
+						onPeerClick(peer)
+					}
 				)
 			}
 		}
@@ -167,6 +167,6 @@ fun NavigationScreenContent(displayName: String)
 fun NavigationScreenPreview() {
 	NodusTheme(dynamicColor = false)
 	{
-		NavigationScreenContent(displayName = "nkminion")
+		NavigationScreenContent(displayName = "nkminion", onPeerClick = {})
 	}
 }
