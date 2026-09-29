@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardColors
@@ -27,6 +28,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults.topAppBarColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -91,6 +96,7 @@ fun PeerListItem(peer: Peer, modifier: Modifier) {
 @Composable
 fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 {
+	var selectedUnverifiedPair by remember { mutableStateOf<Peer?>(null) }
 	val customRipple = RippleConfiguration(color = MaterialTheme.colorScheme.secondary)
 	Scaffold(
 		topBar = {
@@ -154,11 +160,57 @@ fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 				PeerListItem(
 					peer = peer,
 					modifier = Modifier.clickable {
-						onPeerClick(peer)
+						if (peer.isVerified)
+						{
+							onPeerClick(peer)
+						}
+						else
+						{
+							selectedUnverifiedPair = peer
+						}
 					}
 				)
 			}
 		}
+	}
+	selectedUnverifiedPair?.let { peer ->
+		AlertDialog(
+			containerColor = MaterialTheme.colorScheme.primaryContainer,
+			onDismissRequest = {
+				selectedUnverifiedPair = null
+			},
+			title = {
+				Text("Verification Required")
+			},
+			text = {
+				Text("${peer.displayName} is unverified. Perform a verification check or verify via mutual nodes to message them.")
+			},
+			confirmButton = {
+				TextButton(
+					onClick = {
+						//I need to implement this
+						selectedUnverifiedPair = null
+					}
+				) {
+					Text(
+						text = "Verify",
+						color = MaterialTheme.colorScheme.onSurface
+					)
+				}
+			},
+			dismissButton = {
+				TextButton(
+					onClick = {
+						selectedUnverifiedPair = null
+					}
+				) {
+					Text(
+						text = "Cancel",
+						color = MaterialTheme.colorScheme.onSurface
+					)
+				}
+			}
+		)
 	}
 }
 
