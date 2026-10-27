@@ -53,27 +53,21 @@ class MainActivity : ComponentActivity()
 		{
 			missingPermissions.add(android.Manifest.permission.ACCESS_COARSE_LOCATION)
 		}
-		if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R)
+		if (ContextCompat.checkSelfPermission(this,android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
 		{
-			if (ContextCompat.checkSelfPermission(this,android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
-			{
-				missingPermissions.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
-			}
+			missingPermissions.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
 		}
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+		if (ContextCompat.checkSelfPermission(this,android.Manifest.permission.BLUETOOTH_ADVERTISE) != PackageManager.PERMISSION_GRANTED)
 		{
-			if (ContextCompat.checkSelfPermission(this,android.Manifest.permission.BLUETOOTH_ADVERTISE) != PackageManager.PERMISSION_GRANTED)
-			{
-				missingPermissions.add(android.Manifest.permission.BLUETOOTH_ADVERTISE)
-			}
-			if (ContextCompat.checkSelfPermission(this,android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
-			{
-				missingPermissions.add(android.Manifest.permission.BLUETOOTH_CONNECT)
-			}
-			if (ContextCompat.checkSelfPermission(this,android.Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED)
-			{
-				missingPermissions.add(android.Manifest.permission.BLUETOOTH_SCAN)
-			}
+			missingPermissions.add(android.Manifest.permission.BLUETOOTH_ADVERTISE)
+		}
+		if (ContextCompat.checkSelfPermission(this,android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED)
+		{
+			missingPermissions.add(android.Manifest.permission.BLUETOOTH_CONNECT)
+		}
+		if (ContextCompat.checkSelfPermission(this,android.Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED)
+		{
+			missingPermissions.add(android.Manifest.permission.BLUETOOTH_SCAN)
 		}
 		if ((Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU))
 		{
