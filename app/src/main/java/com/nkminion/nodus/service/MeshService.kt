@@ -45,12 +45,17 @@ class MeshService : Service()
 	{
 		override fun onEndpointFound(endpointId:String, info: DiscoveredEndpointInfo)
 		{
+			val peerUUID = info.endpointName
+
+			if (myUUID < peerUUID)
+			{
+				connectionsClient.requestConnection(
+					myUUID,
+					endpointId,
+					connectionLifecycleCallback
+				)
+			}
 			Log.d("MeshService", "Endpoint found: $endpointId (${info.endpointName})")
-			connectionsClient.requestConnection(
-				myUUID,
-				endpointId,
-				connectionLifecycleCallback
-			)
 		}
 
 		override fun onEndpointLost(endpointId: String)
