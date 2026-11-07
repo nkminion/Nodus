@@ -28,6 +28,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults.topAppBarColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,7 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.nkminion.nodus.data.Peer
-import com.nkminion.nodus.data.samplePeers
+import com.nkminion.nodus.data.PeerRepository
 import com.nkminion.nodus.ui.theme.NodusTheme
 
 @Composable
@@ -98,6 +99,9 @@ fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 {
 	var selectedUnverifiedPair by remember { mutableStateOf<Peer?>(null) }
 	val customRipple = RippleConfiguration(color = MaterialTheme.colorScheme.secondary)
+
+	val peers by PeerRepository.peers.collectAsState()
+
 	Scaffold(
 		topBar = {
 			TopAppBar(
@@ -156,7 +160,7 @@ fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 			}
 
 			//Dummies
-			items(samplePeers) { peer ->
+			items(peers, key = { it.uuid }) { peer ->
 				PeerListItem(
 					peer = peer,
 					modifier = Modifier.clickable {

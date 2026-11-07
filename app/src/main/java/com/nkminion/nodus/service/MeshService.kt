@@ -4,7 +4,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
@@ -12,24 +11,26 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.edit
 import com.google.android.gms.nearby.Nearby
 import com.google.android.gms.nearby.connection.AdvertisingOptions
-import com.google.android.gms.nearby.connection.ConnectionsClient
-import com.google.android.gms.nearby.connection.DiscoveryOptions
-import com.google.android.gms.nearby.connection.Strategy
-import java.util.UUID
-import androidx.core.content.edit
 import com.google.android.gms.nearby.connection.ConnectionInfo
 import com.google.android.gms.nearby.connection.ConnectionLifecycleCallback
 import com.google.android.gms.nearby.connection.ConnectionResolution
+import com.google.android.gms.nearby.connection.ConnectionsClient
 import com.google.android.gms.nearby.connection.DiscoveredEndpointInfo
+import com.google.android.gms.nearby.connection.DiscoveryOptions
 import com.google.android.gms.nearby.connection.EndpointDiscoveryCallback
 import com.google.android.gms.nearby.connection.Payload
 import com.google.android.gms.nearby.connection.PayloadCallback
 import com.google.android.gms.nearby.connection.PayloadTransferUpdate
+import com.google.android.gms.nearby.connection.Strategy
 import com.nkminion.nodus.dao.MessageDao
 import com.nkminion.nodus.dao.NodeDao
+import com.nkminion.nodus.data.Peer
+import com.nkminion.nodus.data.PeerRepository
 import com.nkminion.nodus.database.NodusDatabase
+import java.util.UUID
 
 class MeshService : Service()
 {
@@ -40,12 +41,22 @@ class MeshService : Service()
 	private lateinit var nodeDao : NodeDao
 	private lateinit var messageDao: MessageDao
 	private val serviceID = "com.nkminion.nodus.MeshService"
+	private val endpointToUUIDMap = mutableMapOf<String,String>()
 
 	private val endpointDiscoveryCallback = object : EndpointDiscoveryCallback()
 	{
 		override fun onEndpointFound(endpointId:String, info: DiscoveredEndpointInfo)
 		{
 			val peerUUID = info.endpointName
+			endpointToUUIDMap[endpointId] = peerUUID
+
+			val discoveredPeer = Peer(
+				displayName = "Node-${peerUUID.take(5)}",
+				uuid = peerUUID,
+				isVerified = false,
+				hops = 1
+			)
+			PeerRepository.addOrUpdatePeer(discoveredPeer)
 
 			if (myUUID < peerUUID)
 			{
@@ -55,13 +66,15 @@ class MeshService : Service()
 					connectionLifecycleCallback
 				)
 			}
-			Log.d("MeshService", "Endpoint found: $endpointId (${info.endpointName})")
+			Log.d("MeshService", "Endpoint found: $endpointId (${peerUUID})")
 		}
 
 		override fun onEndpointLost(endpointId: String)
 		{
 			Log.d("MeshService", "Endpoint lost: $endpointId")
-			// Mark endpoint as inactive and update ui
+			endpointToUUIDMap.remove(endpointId)?.let { uuid ->
+				PeerRepository.removePeerByUUID(uuid)
+			}
 		}
 	}
 
@@ -139,7 +152,7 @@ class MeshService : Service()
 		connectionsClient = Nearby.getConnectionsClient(this)
 
 		// Shared Preferences
-		sharedPreferences = getSharedPreferences("NodusPreferences",Context.MODE_PRIVATE)
+		sharedPreferences = getSharedPreferences("NodusPreferences", MODE_PRIVATE)
 
 		// Fetch UUID
 		myUUID = getOrCreateUUID()

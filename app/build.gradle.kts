@@ -49,6 +49,7 @@ dependencies {
 	implementation(libs.androidx.navigation.compose)
 	implementation(libs.androidx.room.runtime)
 	implementation(libs.androidx.room.ktx)
+	implementation(libs.jetbrains.kotlinx.coroutines.core)
 	ksp(libs.androidx.room.compiler)
 	implementation(libs.play.services.nearby)
 	implementation(libs.androidx.preference.ktx)
