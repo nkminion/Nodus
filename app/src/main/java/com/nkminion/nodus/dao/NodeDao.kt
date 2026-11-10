@@ -18,4 +18,7 @@ interface NodeDao
 
 	@Query("SELECT * FROM nodes WHERE trustStatus = 'VerifiedMutual' OR trustStatus = 'VerifiedSAS'")
 	fun getVerifiedNodes() : Flow<List<NodeEntity>>
+
+	@Query("UPDATE nodes SET lastSeen = :timestamp WHERE nodeId = :nodeId")
+	suspend fun updateLastSeen(nodeId: String, timestamp: Long = System.currentTimeMillis())
 }

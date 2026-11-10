@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -37,11 +39,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.nkminion.nodus.data.Peer
 import com.nkminion.nodus.data.PeerRepository
+import com.nkminion.nodus.service.MeshService
 import com.nkminion.nodus.ui.theme.NodusTheme
 
 @Composable
@@ -101,6 +107,7 @@ fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 	val customRipple = RippleConfiguration(color = MaterialTheme.colorScheme.secondary)
 
 	val peers by PeerRepository.peers.collectAsState()
+	val activeSas by PeerRepository.activeSasVerification.collectAsState()
 
 	Scaffold(
 		topBar = {
@@ -159,7 +166,6 @@ fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 				}
 			}
 
-			//Dummies
 			items(peers, key = { it.uuid }) { peer ->
 				PeerListItem(
 					peer = peer,
@@ -177,6 +183,7 @@ fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 			}
 		}
 	}
+
 	selectedUnverifiedPair?.let { peer ->
 		AlertDialog(
 			containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -192,7 +199,7 @@ fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 			confirmButton = {
 				TextButton(
 					onClick = {
-						//I need to implement this
+						MeshService.instance?.startKeyExchangeForPeer(peer.uuid)
 						selectedUnverifiedPair = null
 					}
 				) {
@@ -212,6 +219,54 @@ fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 						text = "Cancel",
 						color = MaterialTheme.colorScheme.onSurface
 					)
+				}
+			}
+		)
+	}
+
+	activeSas?.let { sasState ->
+		AlertDialog(
+			containerColor = MaterialTheme.colorScheme.primaryContainer,
+			onDismissRequest = {
+				MeshService.instance?.rejectSasVerification(sasState.peerUuid)
+			},
+			title = { Text("Compare Security Code") },
+			text = {
+				Column(
+					horizontalAlignment = Alignment.CenterHorizontally,
+					modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+				) {
+					Text(
+						text = "Verify that this number matches the number on the other screen:",
+						style = MaterialTheme.typography.bodyMedium
+					)
+					Spacer(modifier = Modifier.height(16.dp))
+					Text(
+						text = sasState.sasCode,
+						fontSize = 32.sp,
+						fontWeight = FontWeight.Bold,
+						fontFamily = FontFamily.Monospace,
+						letterSpacing = 4.sp,
+						color = MaterialTheme.colorScheme.primary
+					)
+				}
+			},
+			confirmButton = {
+				TextButton(
+					onClick = {
+						MeshService.instance?.confirmSasVerification(sasState.peerUuid)
+					}
+				) {
+					Text("Matches", color = MaterialTheme.colorScheme.onSurface)
+				}
+			},
+			dismissButton = {
+				TextButton(
+					onClick = {
+						MeshService.instance?.rejectSasVerification(sasState.peerUuid)
+					}
+				) {
+					Text("Mismatch / Cancel", color = MaterialTheme.colorScheme.error)
 				}
 			}
 		)

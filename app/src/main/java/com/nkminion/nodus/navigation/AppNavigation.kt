@@ -1,19 +1,25 @@
 package com.nkminion.nodus.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavType
-import androidx.navigation.compose.composable
 import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.nkminion.nodus.data.Peer
 import com.nkminion.nodus.data.samplePeers
+import com.nkminion.nodus.service.MeshService
 import com.nkminion.nodus.ui.NavigationScreenContent
 import com.nkminion.nodus.ui.TextScreenContent
 
 @Composable
 fun AppNavigation(displayName: String)
 {
+	LaunchedEffect(displayName) {
+		MeshService.instance?.currentSessionDisplayName = displayName
+	}
+
 	val navController = rememberNavController()
 
 	NavHost(

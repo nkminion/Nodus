@@ -25,23 +25,52 @@ import com.google.android.gms.nearby.connection.Payload
 import com.google.android.gms.nearby.connection.PayloadCallback
 import com.google.android.gms.nearby.connection.PayloadTransferUpdate
 import com.google.android.gms.nearby.connection.Strategy
+import com.nkminion.nodus.crypto.CryptoManager
+import com.nkminion.nodus.crypto.SecureKeyStore
 import com.nkminion.nodus.dao.MessageDao
 import com.nkminion.nodus.dao.NodeDao
+import com.nkminion.nodus.data.PayloadType
 import com.nkminion.nodus.data.Peer
 import com.nkminion.nodus.data.PeerRepository
 import com.nkminion.nodus.database.NodusDatabase
+import com.nkminion.nodus.entity.NodeEntity
+import java.security.KeyPair
 import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 class MeshService : Service()
 {
+	companion object
+	{
+		var instance: MeshService? = null
+			private set
+	}
+
+	private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+	private val sentIdentities = mutableSetOf<String>()
+	private fun hasSentIdentityTo(endpointId: String): Boolean =
+		sentIdentities.contains(endpointId)
+	private fun markIdentitySent(endpointId: String)
+	{
+		sentIdentities.add(endpointId)
+	}
 	private lateinit var connectionsClient : ConnectionsClient
 	private lateinit var sharedPreferences : SharedPreferences
 	private lateinit var myUUID : String
 	private lateinit var db : NodusDatabase
 	private lateinit var nodeDao : NodeDao
 	private lateinit var messageDao: MessageDao
+	private lateinit var secureKeyStore: SecureKeyStore
 	private val serviceID = "com.nkminion.nodus.MeshService"
 	private val endpointToUUIDMap = mutableMapOf<String,String>()
+	private val localKeyPairs = mutableMapOf<String, KeyPair>()
+	private val activeSessionKeys = mutableMapOf<String, ByteArray>()
+	private val peerPublicKeys = mutableMapOf<String, String>()
+	var currentSessionDisplayName: String = "Node"
 
 	private val endpointDiscoveryCallback = object : EndpointDiscoveryCallback()
 	{
@@ -50,13 +79,25 @@ class MeshService : Service()
 			val peerUUID = info.endpointName
 			endpointToUUIDMap[endpointId] = peerUUID
 
-			val discoveredPeer = Peer(
-				displayName = "Node-${peerUUID.take(5)}",
-				uuid = peerUUID,
-				isVerified = false,
-				hops = 1
-			)
-			PeerRepository.addOrUpdatePeer(discoveredPeer)
+			serviceScope.launch {
+				val savedNode = nodeDao.getNodeById(peerUUID)
+				val isVerified = savedNode?.let {
+					it.trustStatus == "VerifiedSAS" || it.trustStatus == "VerifiedMutual"
+				} ?: false
+
+				val discoveredPeer = Peer(
+					displayName = "Node-${peerUUID.take(5)}",
+					uuid = peerUUID,
+					isVerified = isVerified,
+					hops = 1
+				)
+				PeerRepository.addOrUpdatePeer(discoveredPeer)
+
+				if (savedNode != null)
+				{
+					nodeDao.updateLastSeen(peerUUID)
+				}
+			}
 
 			if (myUUID < peerUUID)
 			{
@@ -91,8 +132,6 @@ class MeshService : Service()
 			if (result.status.isSuccess)
 			{
 				Log.d("MeshService", "Connected successfully to: $endpointId")
-				val bytesPayload = Payload.fromBytes("PING".toByteArray())
-				connectionsClient.sendPayload(endpointId, bytesPayload)
 			}
 			else
 			{
@@ -103,6 +142,14 @@ class MeshService : Service()
 		override fun onDisconnected(endpointId: String)
 		{
 			Log.d("MeshService", "Disconnected from: $endpointId")
+			localKeyPairs.remove(endpointId)
+			sentIdentities.remove(endpointId)
+			endpointToUUIDMap.remove(endpointId)?.let { uuid ->
+				activeSessionKeys.remove(uuid)
+				peerPublicKeys.remove(uuid)
+				PeerRepository.removePeerByUUID(uuid)
+				PeerRepository.clearSasVerification()
+			}
 		}
 	}
 
@@ -110,7 +157,73 @@ class MeshService : Service()
 	{
 		override fun onPayloadReceived(endpointId: String, payload: Payload)
 		{
-			Log.d("MeshService", "Received bytes from $endpointId: ${payload.asBytes()?.size}")
+			val bytes = payload.asBytes() ?: return
+			if (bytes.isEmpty())
+			{
+				return
+			}
+
+			val type = PayloadType.fromByte(bytes[0]) ?: return
+			val body = bytes.copyOfRange(1, bytes.size)
+
+			when (type) {
+				PayloadType.KeyExchange -> {
+					val peerUUID = endpointToUUIDMap[endpointId] ?: return
+
+					var myKeyPair = localKeyPairs[endpointId]
+					if (myKeyPair == null) {
+						myKeyPair = CryptoManager.generateEcKeyPair()
+						localKeyPairs[endpointId] = myKeyPair
+
+						val responsePacket = byteArrayOf(PayloadType.KeyExchange.code) + myKeyPair.public.encoded
+						connectionsClient.sendPayload(endpointId, Payload.fromBytes(responsePacket))
+					}
+
+					val sessionKey = CryptoManager.deriveSharedSecret(myKeyPair.private, body)
+					activeSessionKeys[peerUUID] = sessionKey
+
+					val sasCode = CryptoManager.generateSasCode(
+						myPubKey = myKeyPair.public.encoded,
+						peerPubKey = body,
+						sharedSecret = sessionKey
+					)
+
+					peerPublicKeys[peerUUID] = android.util.Base64.encodeToString(body, android.util.Base64.NO_WRAP)
+
+					PeerRepository.showSASVerification(peerUUID, endpointId, sasCode)
+
+					Log.d("MeshService", "SAS generated for $peerUUID: $sasCode")
+				}
+				PayloadType.ChatAck -> {
+					Log.d("MeshService", "Received ACK from $endpointId")
+				}
+				PayloadType.IdentityAnnounce -> {
+					val peerUUID = endpointToUUIDMap[endpointId] ?: return
+					val peerName = String(body, Charsets.UTF_8)
+
+					PeerRepository.updatePeerDisplayName(peerUUID, peerName)
+
+					if (!hasSentIdentityTo(endpointId)) {
+						val echoPacket = byteArrayOf(PayloadType.IdentityAnnounce.code) + currentSessionDisplayName.toByteArray(Charsets.UTF_8)
+						connectionsClient.sendPayload(endpointId, Payload.fromBytes(echoPacket))
+						markIdentitySent(endpointId)
+					}
+
+					serviceScope.launch{
+						nodeDao.insertNode(
+							NodeEntity(
+								peerUUID,
+								peerPublicKeys[peerUUID],
+								"VerifiedSAS",
+								System.currentTimeMillis()
+							)
+						)
+					}
+
+					Log.d("MeshService", "Updated node $peerUUID display name to $peerName")
+				}
+				else -> Unit
+			}
 		}
 
 		override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate)
@@ -138,6 +251,7 @@ class MeshService : Service()
 
 	override fun onCreate() {
 		super.onCreate()
+		instance = this
 
 		// Notification Channel Setup
 		val notifChannel = NotificationChannel(
@@ -161,6 +275,15 @@ class MeshService : Service()
 
 		nodeDao = db.nodeDao()
 		messageDao = db.messageDao()
+
+		// Keys
+		secureKeyStore = SecureKeyStore(this)
+	}
+
+	override fun onDestroy() {
+		super.onDestroy()
+		serviceScope.cancel()
+		instance = null
 	}
 
 	override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int
@@ -232,5 +355,54 @@ class MeshService : Service()
 		)
 		.addOnSuccessListener { Log.d("MeshService", "Discovery started successfully") }
 		.addOnFailureListener { e -> Log.e("MeshService", "Discovery failed: ${e.message}") }
+	}
+
+	fun startKeyExchange(endpointId: String)
+	{
+		val keyPair = CryptoManager.generateEcKeyPair()
+		localKeyPairs[endpointId] = keyPair
+
+		val pubKeyBytes = keyPair.public.encoded
+		val packet = byteArrayOf(PayloadType.KeyExchange.code) + pubKeyBytes
+		connectionsClient.sendPayload(endpointId, Payload.fromBytes(packet))
+	}
+
+	fun confirmSasVerification(peerUuid: String)
+	{
+		val sessionKey = activeSessionKeys[peerUuid]
+		if (sessionKey != null)
+		{
+			secureKeyStore.storeSessionKey(peerUuid, sessionKey)
+
+			val endpointId = endpointToUUIDMap.entries.firstOrNull { it.value == peerUuid }?.key
+			if (endpointId != null)
+			{
+				val nameBytes = currentSessionDisplayName.toByteArray(Charsets.UTF_8)
+				val packet = byteArrayOf(PayloadType.IdentityAnnounce.code) + nameBytes
+				connectionsClient.sendPayload(endpointId, Payload.fromBytes(packet))
+				markIdentitySent(endpointId)
+			}
+
+			PeerRepository.setPeerVerified(peerUuid, true)
+		}
+		PeerRepository.clearSasVerification()
+	}
+
+	fun rejectSasVerification(peerUuid: String)
+	{
+		activeSessionKeys.remove(peerUuid)
+		PeerRepository.clearSasVerification()
+	}
+
+	fun startKeyExchangeForPeer(peerUuid: String)
+	{
+		val endpointId = endpointToUUIDMap.entries.firstOrNull { it.value == peerUuid }?.key
+		if (endpointId != null)
+		{
+			startKeyExchange(endpointId)
+		} else
+		{
+			Log.e("MeshService", "No active endpoint found for peer UUID: $peerUuid")
+		}
 	}
 }

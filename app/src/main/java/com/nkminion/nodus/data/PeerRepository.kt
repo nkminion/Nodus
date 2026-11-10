@@ -5,10 +5,29 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
+data class SasVerificationState(
+	val peerUuid: String,
+	val endpointId: String,
+	val sasCode: String
+)
+
 object PeerRepository
 {
 	private val _peers = MutableStateFlow<List<Peer>>(emptyList())
 	val peers: StateFlow<List<Peer>> = _peers.asStateFlow()
+
+	private val _activeSasVerification = MutableStateFlow<SasVerificationState?>(null)
+	val activeSasVerification: StateFlow<SasVerificationState?> = _activeSasVerification.asStateFlow()
+
+	fun showSASVerification(peerUuid: String, endpointId: String, sasCode: String)
+	{
+		_activeSasVerification.value = SasVerificationState(peerUuid, endpointId, sasCode)
+	}
+
+	fun clearSasVerification()
+	{
+		_activeSasVerification.value = null
+	}
 
 	fun addOrUpdatePeer(peer: Peer)
 	{
@@ -39,6 +58,22 @@ object PeerRepository
 				if (peer.uuid == uuid)
 				{
 					peer.copy(isVerified = isVerified)
+				}
+				else
+				{
+					peer
+				}
+			}
+		}
+	}
+
+	fun updatePeerDisplayName(uuid: String, newName: String)
+	{
+		_peers.update { currentList ->
+			currentList.map { peer ->
+				if (peer.uuid == uuid)
+				{
+					peer.copy(displayName = newName, isVerified = true)
 				}
 				else
 				{
