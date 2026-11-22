@@ -7,7 +7,11 @@ enum class PayloadType(val code: Byte)
 	VerifyResponse(0x03),
 	ChatMessage(0x04),
 	ChatAck(0x05),
-	IdentityAnnounce(0x06);
+	IdentityAnnounce(0x06),
+	FloodEnvelope(0x07),
+	MutualVerifyRequest(0x08),
+	MutualVerifyResponse(0x09),
+	PresenceBeacon(0x0A);
 
 	companion object
 	{
