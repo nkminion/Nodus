@@ -199,7 +199,7 @@ fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 			confirmButton = {
 				TextButton(
 					onClick = {
-						MeshService.instance?.startKeyExchangeForPeer(peer.uuid)
+						MeshService.instance?.verifyPeer(peer.uuid)
 						selectedUnverifiedPair = null
 					}
 				) {
