@@ -262,7 +262,7 @@ object CryptoManager
 	private fun skipMessageKeys(state: RatchetState, until: Int): RatchetState
 	{
 		var ckr = state.recvChainKey ?: return state
-        var nr = state.recvCount
+		var nr = state.recvCount
 		if (until - nr > MAX_SKIP) throw SecurityException("Too many skipped messages")
 		val dhr = state.dhrPublic ?: return state
 		val dhrB64 = Base64.encodeToString(dhr, Base64.NO_WRAP)
