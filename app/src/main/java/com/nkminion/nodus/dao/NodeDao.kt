@@ -21,4 +21,7 @@ interface NodeDao
 
 	@Query("UPDATE nodes SET lastSeen = :timestamp WHERE nodeId = :nodeId")
 	suspend fun updateLastSeen(nodeId: String, timestamp: Long = System.currentTimeMillis())
+
+	@Query("UPDATE nodes SET displayName = :displayName WHERE nodeId = :nodeId")
+	suspend fun updateDisplayName(nodeId: String, displayName: String)
 }

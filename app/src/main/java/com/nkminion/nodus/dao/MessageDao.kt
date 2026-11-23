@@ -13,6 +13,9 @@ interface MessageDao
 	@Insert(onConflict = OnConflictStrategy.REPLACE)
 	suspend fun insertMessage(message: MessageEntity)
 
-	@Query("SELECT * FROM messages WHERE senderId = :peerId OR recipientId = :peerId")
+	@Query("SELECT * FROM messages WHERE senderId = :peerId OR recipientId = :peerId ORDER BY timestamp ASC")
 	fun getMessagesForPeer(peerId: String): Flow<List<MessageEntity>>
+
+	@Query("UPDATE messages SET status = :status WHERE messageId = :messageId")
+	suspend fun updateMessageStatus(messageId: String, status: String)
 }
