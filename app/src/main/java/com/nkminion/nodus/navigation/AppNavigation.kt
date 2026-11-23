@@ -2,13 +2,19 @@ package com.nkminion.nodus.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.nkminion.nodus.data.Peer
-import com.nkminion.nodus.data.samplePeers
+import com.nkminion.nodus.data.PeerRepository
+import com.nkminion.nodus.database.NodusDatabase
 import com.nkminion.nodus.service.MeshService
 import com.nkminion.nodus.ui.NavigationScreenContent
 import com.nkminion.nodus.ui.TextScreenContent
@@ -20,6 +26,8 @@ fun AppNavigation(displayName: String)
 		MeshService.instance?.currentSessionDisplayName = displayName
 	}
 
+	val context = LocalContext.current
+	val db = remember { NodusDatabase.getDBInstance(context) }
 	val navController = rememberNavController()
 
 	NavHost(
@@ -43,13 +51,18 @@ fun AppNavigation(displayName: String)
 			)
 		) { backStackEntry ->
 			val peerUUID = backStackEntry.arguments?.getString("peerUUID") ?: ""
-			val peer = samplePeers.find{it.uuid == peerUUID}
+			val livePeers by PeerRepository.peers.collectAsState()
+			val peer = livePeers.firstOrNull { it.uuid == peerUUID }
+			val savedNode by produceState<com.nkminion.nodus.entity.NodeEntity?>(initialValue = null, peerUUID)
+			{
+				value = db.nodeDao().getNodeById(peerUUID)
+			}
 			TextScreenContent(
 				peer = peer?: Peer(
-					displayName = "Display Name",
-					uuid = "Placeholder UUID",
+					displayName = savedNode?.displayName ?: "Node-${peerUUID.take(5)}",
+					uuid = peerUUID,
 					isVerified = true,
-					hops = 1
+					hops = 5
 				),
 				onBackClick = { navController.popBackStack() }
 			)
