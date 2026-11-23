@@ -11,7 +11,8 @@ enum class PayloadType(val code: Byte)
 	FloodEnvelope(0x07),
 	MutualVerifyRequest(0x08),
 	MutualVerifyResponse(0x09),
-	PresenceBeacon(0x0A);
+	PresenceBeacon(0x0A),
+	MultiHopKeyExchange(0x0B);
 
 	companion object
 	{
