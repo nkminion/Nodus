@@ -1,7 +1,9 @@
 package com.nkminion.nodus.data
 
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
@@ -18,6 +20,13 @@ object PeerRepository
 
 	private val _activeSasVerification = MutableStateFlow<SasVerificationState?>(null)
 	val activeSasVerification: StateFlow<SasVerificationState?> = _activeSasVerification.asStateFlow()
+
+	private val _mutualVerificationEvents = MutableSharedFlow<String>(extraBufferCapacity = 4)
+	val mutualVerificationEvents = _mutualVerificationEvents.asSharedFlow()
+
+	fun emitMutualVerification(message: String) {
+		_mutualVerificationEvents.tryEmit(message)
+	}
 
 	fun showSASVerification(peerUuid: String, endpointId: String, sasCode: String)
 	{
