@@ -24,14 +24,18 @@ import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RippleConfiguration
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults.topAppBarColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -39,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -47,13 +52,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nkminion.nodus.data.Peer
 import com.nkminion.nodus.data.PeerRepository
+import com.nkminion.nodus.database.NodusDatabase
 import com.nkminion.nodus.service.MeshService
 import com.nkminion.nodus.ui.theme.NodusTheme
 
 @Composable
 fun PeerListItem(peer: Peer, modifier: Modifier) {
 	val statusText = if (peer.isVerified) "Verified" else "Unverified"
-	val hopLabel = if (peer.hops == 1) "1 hop" else "${peer.hops} hops"
+	val hopLabel = if (peer.hops > 4) "Offline" else if (peer.hops == 1) "1 hop" else "${peer.hops} hops"
 	val circleColor = when {
 		!peer.isVerified || peer.hops > 4 -> Color(0xFFFF0000)
 		peer.hops > 1 -> Color(0xFFFFAE00)
@@ -103,13 +109,40 @@ fun PeerListItem(peer: Peer, modifier: Modifier) {
 @Composable
 fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 {
+	val context = LocalContext.current
+	val db = remember { NodusDatabase.getDBInstance(context) }
+	val snackbarHostState = remember { SnackbarHostState() }
+	var selectedTab by remember { mutableIntStateOf(0) }
+
 	var selectedUnverifiedPair by remember { mutableStateOf<Peer?>(null) }
 	val customRipple = RippleConfiguration(color = MaterialTheme.colorScheme.secondary)
 
 	val peers by PeerRepository.peers.collectAsState()
+	val savedNodes by db.nodeDao().getVerifiedNodes().collectAsState(initial = emptyList())
 	val activeSas by PeerRepository.activeSasVerification.collectAsState()
 
+	LaunchedEffect(Unit) {
+		PeerRepository.mutualVerificationEvents.collect { message ->
+			snackbarHostState.showSnackbar(message)
+		}
+	}
+
+	val historyPeers = remember(savedNodes, peers) {
+		savedNodes.map { node ->
+			val live = peers.firstOrNull { it.uuid == node.nodeId }
+			val liveName = live?.displayName?.takeUnless { it.startsWith("Node-") }
+			Peer(
+				displayName = liveName?: node.displayName ?: "Node-${node.nodeId.take(5)}",
+				uuid = node.nodeId,
+				isVerified = true,
+				hops = live?.hops ?: 5
+			)
+		}
+	}
+	val displayedPeers = if (selectedTab == 0) peers else historyPeers
+
 	Scaffold(
+		snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
 		topBar = {
 			TopAppBar(
 				colors = topAppBarColors(
@@ -141,10 +174,15 @@ fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 					CompositionLocalProvider(LocalRippleConfiguration provides customRipple)
 					{
 						TextButton(
-							onClick = { print("Clicked Nearby") },
+							onClick = { selectedTab = 0 },
 							modifier = Modifier.weight(1f),
 							colors = ButtonDefaults.textButtonColors(
-								containerColor = MaterialTheme.colorScheme.primaryContainer,
+								containerColor = if (selectedTab == 0) {
+									MaterialTheme.colorScheme.secondaryContainer
+								}
+								else {
+									MaterialTheme.colorScheme.primaryContainer
+								},
 								contentColor = MaterialTheme.colorScheme.onPrimaryContainer
 							),
 							shape = RectangleShape
@@ -152,10 +190,16 @@ fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 							Text("Nearby")
 						}
 						TextButton(
-							onClick = { print("Clicked History") },
+							onClick = { selectedTab = 1 },
 							modifier = Modifier.weight(1f),
 							colors = ButtonDefaults.textButtonColors(
-								containerColor = MaterialTheme.colorScheme.primaryContainer,
+								containerColor = if (selectedTab == 1) {
+									MaterialTheme.colorScheme.secondaryContainer
+								}
+								else
+								{
+									MaterialTheme.colorScheme.primaryContainer
+								},
 								contentColor = MaterialTheme.colorScheme.onPrimaryContainer
 							),
 							shape = RectangleShape
@@ -166,7 +210,7 @@ fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 				}
 			}
 
-			items(peers, key = { it.uuid }) { peer ->
+			items(displayedPeers, key = { it.uuid }) { peer ->
 				PeerListItem(
 					peer = peer,
 					modifier = Modifier.clickable {
@@ -225,6 +269,7 @@ fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 	}
 
 	activeSas?.let { sasState ->
+		val sasPeerName = peers.firstOrNull { it.uuid == sasState.peerUuid }?.displayName
 		AlertDialog(
 			containerColor = MaterialTheme.colorScheme.primaryContainer,
 			onDismissRequest = {
@@ -236,6 +281,20 @@ fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 					horizontalAlignment = Alignment.CenterHorizontally,
 					modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
 				) {
+					if (sasPeerName != null)
+					{
+						Text(
+							text = sasPeerName,
+							style = MaterialTheme.typography.titleMedium,
+							color = MaterialTheme.colorScheme.onSurface
+						)
+					}
+					Text(
+						text = sasState.peerUuid,
+						style = MaterialTheme.typography.bodySmall,
+						color = MaterialTheme.colorScheme.onSurfaceVariant
+					)
+					Spacer(modifier = Modifier.height(12.dp))
 					Text(
 						text = "Verify that this number matches the number on the other screen:",
 						style = MaterialTheme.typography.bodyMedium
