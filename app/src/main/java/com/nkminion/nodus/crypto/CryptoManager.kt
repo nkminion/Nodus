@@ -283,16 +283,9 @@ object CryptoManager
 		val dhRecv = deriveSharedSecretFromBytes(state.dhsPrivate, peerNewDhPub)
 		val (rk1, ckr) = kdfRk(state.rootKey, dhRecv)
 
-		val newDhs = generateEcKeyPair()
-		val dhSend = deriveSharedSecret(newDhs.private, peerNewDhPub)
-		val (rk2, cks) = kdfRk(rk1, dhSend)
-
 		return state.copy(
-			dhsPrivate = newDhs.private.encoded,
-			dhsPublic = newDhs.public.encoded,
 			dhrPublic = peerNewDhPub,
-			rootKey = rk2,
-			sendChainKey = cks,
+			rootKey = rk1,
 			recvChainKey = ckr,
 			prevChainLen = state.sendCount,
 			sendCount = 0,
