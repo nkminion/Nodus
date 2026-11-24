@@ -15,7 +15,6 @@ import javax.crypto.KeyAgreement
 import javax.crypto.Mac
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
-import kotlin.math.abs
 
 data class RatchetState(
 	val dhsPrivate: ByteArray,
@@ -60,7 +59,7 @@ object CryptoManager
 			signature.update(data)
 			signature.verify(signatureBytes)
 		}
-		catch (e: Exception)
+		catch (_: Exception)
 		{
 			false
 		}
@@ -118,7 +117,7 @@ object CryptoManager
 				((hash[2].toInt() and 0xFF) shl 8) or
 				(hash[3].toInt() and 0xFF)
 
-		val positiveCode = abs(codeInt) % 1000000
+		val positiveCode = (codeInt.toLong() and 0xFFFFFFFFL) % 1_000_000L
 		return String.format(Locale.US,"%06d", positiveCode)
 	}
 
