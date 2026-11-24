@@ -140,10 +140,13 @@ fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 			val node = savedById[peerId]
 			val live = peers.firstOrNull { it.uuid == peerId }
 			val liveName = live?.displayName?.takeUnless { it.startsWith("Node-") }
+			val isVerified = node?.let {
+				it.trustStatus == "VerifiedSAS" || it.trustStatus == "VerifiedMutual"
+			} ?: false
 			Peer(
 				displayName = liveName?: node?.displayName ?: "Node-${peerId.take(5)}",
 				uuid = peerId,
-				isVerified = true,
+				isVerified = isVerified,
 				hops = live?.hops ?: 5
 			)
 		}
