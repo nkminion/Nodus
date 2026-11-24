@@ -1,6 +1,5 @@
 package com.nkminion.nodus
 
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -11,7 +10,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -97,7 +95,7 @@ class MainActivity : ComponentActivity()
 				AppRouter(
 					initialDisplayName = null,
 					onSaveDisplayName = { name ->
-						getSharedPreferences("NodusPreferences", Context.MODE_PRIVATE)
+						getSharedPreferences("NodusPreferences", MODE_PRIVATE)
 							.edit { putString("NodusDisplayName", name) }
 					},
 					pendingChatPeerUuid = pendingChatPeerUuid,

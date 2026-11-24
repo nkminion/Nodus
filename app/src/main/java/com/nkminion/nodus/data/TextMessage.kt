@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package com.nkminion.nodus.data
 
 data class TextMessage(
