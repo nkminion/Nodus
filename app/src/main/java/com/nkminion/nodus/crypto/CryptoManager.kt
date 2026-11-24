@@ -27,7 +27,43 @@ data class RatchetState(
 	val recvCount: Int = 0,
 	val prevChainLen: Int = 0,
 	val skippedKeys: MutableMap<String, ByteArray> = mutableMapOf()
-)
+) {
+	override fun equals(other: Any?): Boolean {
+		if (this === other) return true
+		if (javaClass != other?.javaClass) return false
+
+		other as RatchetState
+
+		if (sendCount != other.sendCount) return false
+		if (recvCount != other.recvCount) return false
+		if (prevChainLen != other.prevChainLen) return false
+		if (!dhsPrivate.contentEquals(other.dhsPrivate)) return false
+		if (!dhsPublic.contentEquals(other.dhsPublic)) return false
+		if (!dhrPublic.contentEquals(other.dhrPublic)) return false
+		if (!rootKey.contentEquals(other.rootKey)) return false
+		if (!sendChainKey.contentEquals(other.sendChainKey)) return false
+		if (!recvChainKey.contentEquals(other.recvChainKey)) return false
+		if (skippedKeys.size != other.skippedKeys.size) return false
+		if (!skippedKeys.all { (k, v) -> other.skippedKeys[k]?.contentEquals(v) == true }) return false
+
+		return true
+	}
+
+	override fun hashCode(): Int {
+		var result = sendCount
+		result = 31 * result + recvCount
+		result = 31 * result + prevChainLen
+		result = 31 * result + dhsPrivate.contentHashCode()
+		result = 31 * result + dhsPublic.contentHashCode()
+		result = 31 * result + (dhrPublic?.contentHashCode() ?: 0)
+		result = 31 * result + rootKey.contentHashCode()
+		result = 31 * result + (sendChainKey?.contentHashCode() ?: 0)
+		result = 31 * result + (recvChainKey?.contentHashCode() ?: 0)
+		val skippedHash = skippedKeys.entries.sumOf { (k, v) -> k.hashCode() xor v.contentHashCode() }
+		result = 31 * result + skippedHash
+		return result
+	}
+}
 
 object CryptoManager
 {
