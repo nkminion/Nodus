@@ -18,4 +18,13 @@ interface MessageDao
 
 	@Query("UPDATE messages SET status = :status WHERE messageId = :messageId")
 	suspend fun updateMessageStatus(messageId: String, status: String)
+
+	@Query("""
+		SELECT CASE WHEN senderId = :myUuid THEN recipientId ELSE senderId END AS peerId
+		FROM messages
+		WHERE senderId = :myUuid OR recipientId = :myUuid
+		GROUP BY peerId
+		ORDER BY MAX(timestamp) DESC
+	""")
+	fun getMessagedPeerIds(myUuid: String): Flow<List<String>>
 }
