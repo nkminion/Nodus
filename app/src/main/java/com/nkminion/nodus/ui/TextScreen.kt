@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +40,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.nkminion.nodus.R
 import com.nkminion.nodus.crypto.CryptoManager
 import com.nkminion.nodus.data.Peer
@@ -164,6 +168,29 @@ fun TextScreenContent(
 	onBackClick: () -> Unit
 ) {
 	val context = LocalContext.current
+	val lifecycleOwner = LocalLifecycleOwner.current
+	DisposableEffect(lifecycleOwner, peer.uuid)
+	{
+		val observer = LifecycleEventObserver { _, event ->
+			when (event)
+			{
+				Lifecycle.Event.ON_RESUME -> PeerRepository.activeChatPeerUuid = peer.uuid
+				Lifecycle.Event.ON_PAUSE -> if (PeerRepository.activeChatPeerUuid == peer.uuid)
+				{
+					PeerRepository.activeChatPeerUuid = null
+				}
+				else -> Unit
+			}
+		}
+		lifecycleOwner.lifecycle.addObserver(observer)
+		onDispose {
+			lifecycleOwner.lifecycle.removeObserver(observer)
+			if (PeerRepository.activeChatPeerUuid == peer.uuid)
+			{
+				PeerRepository.activeChatPeerUuid = null
+			}
+		}
+	}
 	val db = remember { NodusDatabase.getDBInstance(context) }
 	val messages by db.messageDao().getMessagesForPeer(peer.uuid).collectAsState(initial = emptyList())
 	val livePeers by PeerRepository.peers.collectAsState()
