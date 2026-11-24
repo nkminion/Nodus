@@ -21,6 +21,9 @@ object PeerRepository
 	private val _activeSasVerification = MutableStateFlow<SasVerificationState?>(null)
 	val activeSasVerification: StateFlow<SasVerificationState?> = _activeSasVerification.asStateFlow()
 
+	@Volatile
+	var activeChatPeerUuid: String? = null
+
 	private val _mutualVerificationEvents = MutableSharedFlow<String>(extraBufferCapacity = 4)
 	val mutualVerificationEvents = _mutualVerificationEvents.asSharedFlow()
 
