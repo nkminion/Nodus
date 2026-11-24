@@ -26,6 +26,7 @@ import com.google.android.gms.nearby.connection.Payload
 import com.google.android.gms.nearby.connection.PayloadCallback
 import com.google.android.gms.nearby.connection.PayloadTransferUpdate
 import com.google.android.gms.nearby.connection.Strategy
+import com.nkminion.nodus.MainActivity
 import com.nkminion.nodus.crypto.CryptoManager
 import com.nkminion.nodus.crypto.SecureKeyStore
 import com.nkminion.nodus.dao.MessageDao
@@ -95,6 +96,9 @@ class MeshService : Service()
 
 	@Volatile
 	private var verifiedNodes: Set<String> = emptySet()
+
+	@Volatile
+	private var isForegroundStarted: Boolean = false
 
 	private val seenPacketIds = object : LinkedHashMap<Long, Boolean>(MAX_SEEN_IDS, 0.75f,true)
 	{
@@ -343,8 +347,14 @@ class MeshService : Service()
 			"NodusMeshChannel",
 			NotificationManager.IMPORTANCE_LOW
 		)
+		val msgChannel = NotificationChannel(
+			"NodusMessagesChannelID",
+			"Incoming Messages",
+			NotificationManager.IMPORTANCE_HIGH
+		)
 		val manager = getSystemService(NotificationManager::class.java)
 		manager.createNotificationChannel(notifChannel)
+		manager.createNotificationChannel(msgChannel)
 
 		// Nearby Connections Setup
 		connectionsClient = Nearby.getConnectionsClient(this)
@@ -368,6 +378,15 @@ class MeshService : Service()
 				verifiedNodes = nodes.map { it.nodeId }.toSet()
 			}
 		}
+
+		serviceScope.launch {
+			PeerRepository.peers.collect { currentPeers ->
+				if (isForegroundStarted)
+				{
+					updateForegroundNodeCount(currentPeers.size)
+				}
+			}
+		}
 	}
 
 	override fun onDestroy() {
@@ -385,14 +404,30 @@ class MeshService : Service()
 
 	override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int
 	{
-		val stopIntent = Intent(this, MeshService::class.java).apply {
-			action = "ACTION_STOP_SERVICE"
-		}
 		if (intent?.action == "ACTION_STOP_SERVICE")
 		{
+			isForegroundStarted = false
 			stopForeground(STOP_FOREGROUND_REMOVE)
 			stopSelf()
 			return START_NOT_STICKY
+		}
+
+		ServiceCompat.startForeground(
+			this,
+			100,
+			buildForegroundNotification(PeerRepository.peers.value.size),
+			ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+		)
+		isForegroundStarted = true
+
+		startMesh()
+
+		return START_STICKY
+	}
+
+	private fun buildForegroundNotification(connectedCount: Int) = run {
+		val stopIntent = Intent(this, MeshService::class.java).apply {
+			action = "ACTION_STOP_SERVICE"
 		}
 		val pendingIntent = PendingIntent.getService(
 			this,
@@ -400,28 +435,41 @@ class MeshService : Service()
 			stopIntent,
 			PendingIntent.FLAG_IMMUTABLE
 		)
-		val notifBuilder = NotificationCompat.Builder(this,"NodusMeshChannelID")
+		val openAppIntent = PendingIntent.getActivity(
+			this,
+			1,
+			Intent(this, MainActivity::class.java).apply {
+				flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+			},
+			PendingIntent.FLAG_IMMUTABLE
+		)
+		val nodeLabel = if (connectedCount == 1) "node" else "nodes"
+		NotificationCompat.Builder(this, "NodusMeshChannelID")
 			.setSmallIcon(android.R.drawable.ic_notification_overlay)
 			.setContentTitle("Nodus is running")
-			.setContentText("Connected to nodes")
+			.setContentText("Connected to $connectedCount $nodeLabel")
+			.setContentIntent(openAppIntent)
 			.setPriority(NotificationCompat.PRIORITY_LOW)
+			.setOnlyAlertOnce(true)
 			.setAutoCancel(false)
 			.addAction(
 				0,
 				"Quit App",
 				pendingIntent
-			)
+			).build()
+	}
 
-		ServiceCompat.startForeground(
-			this,
-			100,
-			notifBuilder.build(),
-			ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-		)
-
-		startMesh()
-
-		return START_STICKY
+	private fun updateForegroundNodeCount(connectedCount: Int)
+	{
+		try
+		{
+			val manager = getSystemService(NotificationManager::class.java)
+			manager.notify(100, buildForegroundNotification(connectedCount))
+		}
+		catch (e: SecurityException)
+		{
+			Log.w("MeshService", "Missing notification permission: ${e.message}")
+		}
 	}
 
 	fun startMesh()
@@ -1039,6 +1087,14 @@ class MeshService : Service()
 								"DELIVERED"
 							)
 						)
+						if (PeerRepository.activeChatPeerUuid != senderUuid)
+						{
+							val senderName = PeerRepository.peers.value.firstOrNull { it.uuid == senderUuid }
+								?.displayName?.takeUnless { it.startsWith("Node-") }
+								?: nodeDao.getNodeById(senderUuid)?.displayName
+								?: "Node-${senderUuid.take(5)}"
+							showIncomingMessageNotification(senderUuid, senderName, decryptedText)
+						}
 					}
 					sendChatAck(senderUuid, msgUuid)
 				} catch (e: Exception) {
@@ -1091,6 +1147,38 @@ class MeshService : Service()
 		{
 			val manager = getSystemService(NotificationManager::class.java)
 			manager.notify(verifiedUuid.hashCode(), notif)
+		}
+		catch (e: SecurityException)
+		{
+			Log.w("MeshService", "Missing notification permission: ${e.message}")
+		}
+	}
+
+	private fun showIncomingMessageNotification(senderUuid: String, senderName: String, messageText: String)
+	{
+		val openAppIntent = PendingIntent.getActivity(
+			this,
+			senderUuid.hashCode(),
+			Intent(this, MainActivity::class.java).apply {
+				flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+			},
+			PendingIntent.FLAG_IMMUTABLE
+		)
+
+		val notif = NotificationCompat.Builder(this, "NodusMessagesChannelID")
+			.setSmallIcon(android.R.drawable.ic_dialog_email)
+			.setContentTitle(senderName)
+			.setContentText(messageText)
+			.setStyle(NotificationCompat.BigTextStyle().bigText(messageText))
+			.setContentIntent(openAppIntent)
+			.setPriority(NotificationCompat.PRIORITY_HIGH)
+			.setAutoCancel(true)
+			.build()
+
+		try
+		{
+			val manager = getSystemService(NotificationManager::class.java)
+			manager.notify(senderUuid.hashCode() + 10000, notif)
 		}
 		catch (e: SecurityException)
 		{
