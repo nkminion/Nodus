@@ -145,7 +145,14 @@ fun MessageInputBar(
 			OutlinedTextField(
 				value = text,
 				onValueChange = { if (it.length <= CryptoManager.CHAR_LIMIT) onValueChange(it) },
-				placeholder = { Text("Message $peerName (${text.length}/${CryptoManager.CHAR_LIMIT})") },
+				placeholder = { Text("Message $peerName") },
+				suffix = {
+					Text(
+						text = "${text.length}/${CryptoManager.CHAR_LIMIT}",
+						style = MaterialTheme.typography.labelSmall,
+						color = MaterialTheme.colorScheme.onSurfaceVariant
+					)
+				},
 				modifier = Modifier.weight(1f),
 				shape = CircleShape,
 				maxLines = 4
