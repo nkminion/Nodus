@@ -85,7 +85,7 @@ object PeerRepository
 			currentList.map { peer ->
 				if (peer.uuid == uuid)
 				{
-					peer.copy(displayName = newName, isVerified = true)
+					peer.copy(displayName = newName)
 				}
 				else
 				{
