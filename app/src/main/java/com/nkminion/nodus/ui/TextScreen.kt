@@ -174,7 +174,6 @@ fun MessageInputBar(
 	}
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TextScreenContent(
 	peer: Peer,

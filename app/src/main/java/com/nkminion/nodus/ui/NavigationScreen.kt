@@ -106,7 +106,6 @@ fun PeerListItem(peer: Peer, modifier: Modifier) {
 	}
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 {
