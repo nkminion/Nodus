@@ -24,13 +24,11 @@ abstract class NodusDatabase : RoomDatabase()
 		{
 			return DB_INSTANCE ?: synchronized(this)
 			{
-				val instance = Room.databaseBuilder(
+				DB_INSTANCE ?: Room.databaseBuilder(
 					context.applicationContext,
 					NodusDatabase::class.java,
 					"NodusDatabase"
-				).build()
-				DB_INSTANCE = instance
-				instance
+				).build().also { DB_INSTANCE = it }
 			}
 		}
 	}
