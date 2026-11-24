@@ -1,5 +1,6 @@
 package com.nkminion.nodus.ui
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -111,6 +112,10 @@ fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 {
 	val context = LocalContext.current
 	val db = remember { NodusDatabase.getDBInstance(context) }
+	val myUuid = remember {
+		context.getSharedPreferences("NodusPreferences", Context.MODE_PRIVATE)
+			.getString("NodusUUID", "") ?: ""
+	}
 	val snackbarHostState = remember { SnackbarHostState() }
 	var selectedTab by remember { mutableIntStateOf(0) }
 
@@ -119,6 +124,7 @@ fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 
 	val peers by PeerRepository.peers.collectAsState()
 	val savedNodes by db.nodeDao().getVerifiedNodes().collectAsState(initial = emptyList())
+	val messagedPeerIds by db.messageDao().getMessagedPeerIds(myUuid).collectAsState(initial = emptyList())
 	val activeSas by PeerRepository.activeSasVerification.collectAsState()
 
 	LaunchedEffect(Unit) {
@@ -127,13 +133,16 @@ fun NavigationScreenContent(displayName: String,onPeerClick: (Peer) -> Unit)
 		}
 	}
 
-	val historyPeers = remember(savedNodes, peers) {
-		savedNodes.map { node ->
-			val live = peers.firstOrNull { it.uuid == node.nodeId }
+	val historyPeers = remember(messagedPeerIds, savedNodes, peers)
+	{
+		val savedById = savedNodes.associateBy { it.nodeId }
+		messagedPeerIds.map { peerId ->
+			val node = savedById[peerId]
+			val live = peers.firstOrNull { it.uuid == peerId }
 			val liveName = live?.displayName?.takeUnless { it.startsWith("Node-") }
 			Peer(
-				displayName = liveName?: node.displayName ?: "Node-${node.nodeId.take(5)}",
-				uuid = node.nodeId,
+				displayName = liveName?: node?.displayName ?: "Node-${peerId.take(5)}",
+				uuid = peerId,
 				isVerified = true,
 				hops = live?.hops ?: 5
 			)
