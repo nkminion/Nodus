@@ -81,7 +81,7 @@ fun LoginScreenContent(onSubmit: (String) -> Unit)
 				OutlinedButton(
 					onClick = {
 						if (textVal.isNotBlank()) {
-							onSubmit(textVal)
+							onSubmit(textVal.trim())
 						}
 					},
 					border = BorderStroke(

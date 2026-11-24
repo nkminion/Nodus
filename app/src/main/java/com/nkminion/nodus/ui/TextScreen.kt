@@ -68,7 +68,13 @@ fun TextBubble(
 	else
 		MaterialTheme.colorScheme.primaryContainer
 
-	val contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+	val contentColor = if (isMe) {
+		MaterialTheme.colorScheme.onPrimary
+	}
+	else
+	{
+		MaterialTheme.colorScheme.onPrimaryContainer
+	}
 
 	Box(
 		modifier = modifier
