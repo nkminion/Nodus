@@ -1,5 +1,6 @@
 package com.nkminion.nodus
 
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -10,11 +11,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import com.nkminion.nodus.navigation.AppNavigation
 import com.nkminion.nodus.service.MeshService
 import com.nkminion.nodus.ui.LoginScreenContent
@@ -22,6 +25,7 @@ import com.nkminion.nodus.ui.theme.NodusTheme
 
 class MainActivity : ComponentActivity()
 {
+	private var pendingChatPeerUuid by mutableStateOf<String?>(null)
 	private fun startMeshService()
 	{
 		val serviceIntent = Intent(this, MeshService::class.java)
@@ -44,6 +48,7 @@ class MainActivity : ComponentActivity()
 	override fun onCreate(savedInstanceState: Bundle?)
 	{
 		super.onCreate(savedInstanceState)
+		pendingChatPeerUuid = intent?.getStringExtra("NAVIGATE_TO_PEER")
 		val missingPermissions = mutableListOf<String>()
 		if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
 		{
@@ -52,10 +57,6 @@ class MainActivity : ComponentActivity()
 		if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)
 		{
 			missingPermissions.add(android.Manifest.permission.ACCESS_COARSE_LOCATION)
-		}
-		if (ContextCompat.checkSelfPermission(this,android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
-		{
-			missingPermissions.add(android.Manifest.permission.ACCESS_FINE_LOCATION)
 		}
 		if (ContextCompat.checkSelfPermission(this,android.Manifest.permission.BLUETOOTH_ADVERTISE) != PackageManager.PERMISSION_GRANTED)
 		{
@@ -93,20 +94,40 @@ class MainActivity : ComponentActivity()
 		{
 			NodusTheme(dynamicColor = false)
 			{
-				AppRouter()
+				AppRouter(
+					initialDisplayName = null,
+					onSaveDisplayName = { name ->
+						getSharedPreferences("NodusPreferences", Context.MODE_PRIVATE)
+							.edit { putString("NodusDisplayName", name) }
+					},
+					pendingChatPeerUuid = pendingChatPeerUuid,
+					onConsumedChatPeerUuid = { pendingChatPeerUuid = null }
+				)
 			}
 		}
+	}
+
+	override fun onNewIntent(intent: Intent)
+	{
+		super.onNewIntent(intent)
+		setIntent(intent)
+		pendingChatPeerUuid = intent.getStringExtra("NAVIGATE_TO_PEER")
 	}
 }
 
 @Composable
-fun AppRouter()
-{
-	var displayName by remember { mutableStateOf<String?>(null) }
+fun AppRouter(
+	initialDisplayName: String?,
+	onSaveDisplayName: (String) -> Unit,
+	pendingChatPeerUuid: String?,
+	onConsumedChatPeerUuid: () -> Unit
+) {
+	var displayName by rememberSaveable { mutableStateOf(initialDisplayName) }
 	if (displayName == null)
 	{
 		LoginScreenContent(
 			onSubmit = { enteredName ->
+				onSaveDisplayName(enteredName)
 				displayName = enteredName
 			}
 		)
@@ -114,6 +135,10 @@ fun AppRouter()
 	else
 	{
 		val userName: String = displayName ?: "placeholder"
-		AppNavigation(displayName = userName)
+		AppNavigation(
+			displayName = userName,
+			pendingChatPeerUuid = pendingChatPeerUuid,
+			onConsumedChatPeerUuid = onConsumedChatPeerUuid
+		)
 	}
 }
