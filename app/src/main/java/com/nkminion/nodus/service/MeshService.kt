@@ -45,11 +45,13 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.nio.BufferUnderflowException
 import java.nio.ByteBuffer
 import java.security.KeyPair
 import java.security.SecureRandom
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration.Companion.milliseconds
 
 class MeshService : Service()
@@ -68,7 +70,7 @@ class MeshService : Service()
 	private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 	private var beaconJob: Job? = null
 	private val secureRandom = SecureRandom()
-	private val sentIdentities = mutableSetOf<String>()
+	private val sentIdentities = ConcurrentHashMap.newKeySet<String>()
 	private fun hasSentIdentityTo(endpointId: String): Boolean =
 		sentIdentities.contains(endpointId)
 	private fun markIdentitySent(endpointId: String)
@@ -100,6 +102,9 @@ class MeshService : Service()
 	@Volatile
 	private var isForegroundStarted: Boolean = false
 
+	@Volatile
+	private var isMeshStarted: Boolean = false
+
 	private val seenPacketIds = object : LinkedHashMap<Long, Boolean>(MAX_SEEN_IDS, 0.75f,true)
 	{
 		override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, Boolean>?): Boolean
@@ -108,10 +113,16 @@ class MeshService : Service()
 		}
 	}
 
-	private val lastInboundFloodTime = ConcurrentHashMap<String, Long>()
+	private val seenMessageIds = object : LinkedHashMap<String, Boolean>(MAX_SEEN_IDS, 0.75f, true)
+	{
+		override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Boolean>?): Boolean
+		{
+			return size > MAX_SEEN_IDS
+		}
+	}
 
-	@Volatile
-	private var lastOutboundFloodTime: Long = 0L
+	private val lastInboundFloodTime = ConcurrentHashMap<String, Long>()
+	private val lastOutboundFloodTime = AtomicLong(0L)
 
 	var currentSessionDisplayName: String = "Node"
 
@@ -172,9 +183,17 @@ class MeshService : Service()
 	private val connectionLifecycleCallback = object : ConnectionLifecycleCallback()
 	{
 		override fun onConnectionInitiated(endpointId: String, info: ConnectionInfo) {
-			Log.d("MeshService", "Connection initiated from: ${info.endpointName}")
-			// Temp accept for peer visibility
-			 connectionsClient.acceptConnection(endpointId,payloadCallback)
+			val remoteUuid = info.endpointName
+			val isValidUuid = runCatching { UUID.fromString(remoteUuid) }.isSuccess
+			val hasDuplicateEndpoint = endpointToUUIDMap.any { (ep, uuid) -> ep != endpointId && uuid == remoteUuid }
+			if (!isValidUuid || remoteUuid == myUUID || hasDuplicateEndpoint)
+			{
+				Log.w("MeshService", "Rejected invalid or duplicate connection from $remoteUuid ($endpointId)")
+				connectionsClient.rejectConnection(endpointId)
+				return
+			}
+			Log.d("MeshService", "Connection initiated from: $remoteUuid")
+			connectionsClient.acceptConnection(endpointId, payloadCallback)
 		}
 
 		override fun onConnectionResult(endpointId: String, result: ConnectionResolution)
@@ -186,6 +205,7 @@ class MeshService : Service()
 			}
 			else
 			{
+				endpointToUUIDMap.remove(endpointId)
 				Log.e("MeshService", "Connection failed with status: ${result.status.statusCode}")
 			}
 		}
@@ -204,7 +224,10 @@ class MeshService : Service()
 				confirmedSasPeers.remove(uuid)
 				pendingPeerIdentities.remove(uuid)
 				PeerRepository.removePeerByUUID(uuid)
-				PeerRepository.clearSasVerification()
+				if (PeerRepository.activeSasVerification.value?.peerUuid == uuid)
+				{
+					PeerRepository.clearSasVerification()
+				}
 			}
 		}
 	}
@@ -224,28 +247,36 @@ class MeshService : Service()
 
 			when (type) {
 				PayloadType.KeyExchange -> {
+					if (body.size < 2) return
+					val isReply = body[0] == 1.toByte()
+					val peerPubBytes = body.copyOfRange(1, body.size)
+
 					val peerUUID = endpointToUUIDMap[endpointId] ?: return
 					confirmedSasPeers.remove(peerUUID)
+					sentIdentities.remove(endpointId)
 
-					var myKeyPair = localKeyPairs[endpointId]
-					if (myKeyPair == null) {
-						myKeyPair = CryptoManager.generateEcKeyPair()
-						localKeyPairs[endpointId] = myKeyPair
-
-						val responsePacket = byteArrayOf(PayloadType.KeyExchange.code) + myKeyPair.public.encoded
+					val myKeyPair = if (!isReply) {
+						val freshPair = CryptoManager.generateEcKeyPair()
+						localKeyPairs[endpointId] = freshPair
+						val responsePacket = byteArrayOf(PayloadType.KeyExchange.code, 1) + freshPair.public.encoded
 						connectionsClient.sendPayload(endpointId, Payload.fromBytes(responsePacket))
+						freshPair
+					}
+					else
+					{
+						localKeyPairs[endpointId] ?: return
 					}
 
-					val sessionKey = CryptoManager.deriveSharedSecret(myKeyPair.private, body)
+					val sessionKey = CryptoManager.deriveSharedSecret(myKeyPair.private, peerPubBytes)
 					activeSessionKeys[peerUUID] = sessionKey
 
 					val sasCode = CryptoManager.generateSasCode(
 						myPubKey = myKeyPair.public.encoded,
-						peerPubKey = body,
+						peerPubKey = peerPubBytes,
 						sharedSecret = sessionKey
 					)
 
-					peerEcdhPublicKeys[peerUUID] = body
+					peerEcdhPublicKeys[peerUUID] = peerPubBytes
 
 					PeerRepository.showSASVerification(peerUUID, endpointId, sasCode)
 
@@ -364,6 +395,7 @@ class MeshService : Service()
 
 		// Fetch UUID
 		myUUID = getOrCreateUUID()
+		currentSessionDisplayName = sharedPreferences.getString("NodusDisplayName", null)?.takeIf { it.isNotBlank() } ?: "Node"
 
 		db = NodusDatabase.getDBInstance(this)
 
@@ -392,6 +424,7 @@ class MeshService : Service()
 	override fun onDestroy() {
 		super.onDestroy()
 		beaconJob?.cancel()
+		isMeshStarted = false
 		serviceScope.cancel()
 		if (::connectionsClient.isInitialized)
 		{
@@ -474,6 +507,8 @@ class MeshService : Service()
 
 	fun startMesh()
 	{
+		if (isMeshStarted) return
+		isMeshStarted = true
 		Log.d("MeshService", "Starting mesh advertising and discovery...")
 
 		val advertisingOptions = AdvertisingOptions.Builder()
@@ -507,11 +542,12 @@ class MeshService : Service()
 	fun startKeyExchange(endpointId: String)
 	{
 		endpointToUUIDMap[endpointId]?.let { confirmedSasPeers.remove(it) }
+		sentIdentities.remove(endpointId)
 		val keyPair = CryptoManager.generateEcKeyPair()
 		localKeyPairs[endpointId] = keyPair
 
 		val pubKeyBytes = keyPair.public.encoded
-		val packet = byteArrayOf(PayloadType.KeyExchange.code) + pubKeyBytes
+		val packet = byteArrayOf(PayloadType.KeyExchange.code, 0) + pubKeyBytes
 		connectionsClient.sendPayload(endpointId, Payload.fromBytes(packet))
 	}
 
@@ -559,6 +595,13 @@ class MeshService : Service()
 	fun rejectSasVerification(peerUuid: String)
 	{
 		activeSessionKeys.remove(peerUuid)
+		peerEcdhPublicKeys.remove(peerUuid)
+		confirmedSasPeers.remove(peerUuid)
+		pendingPeerIdentities.remove(peerUuid)
+		endpointToUUIDMap.entries.firstOrNull { it.value == peerUuid }?.key?.let { epId ->
+			localKeyPairs.remove(epId)
+			sentIdentities.remove(epId)
+		}
 		PeerRepository.clearSasVerification()
 	}
 
@@ -574,8 +617,12 @@ class MeshService : Service()
 			val endpointId = endpointToUUIDMap.entries.firstOrNull { it.value == targetUuid }?.key
 			if (endpointId != null)
 			{
-				Log.d("MeshService", "Mutual verification timed out for $targetUuid, falling back to SAS")
-				startKeyExchange(endpointId)
+				val existingNode = nodeDao.getNodeById(targetUuid)
+				if (existingNode?.trustStatus != "VerifiedMutual")
+				{
+					Log.d("MeshService", "Mutual verification timed out for $targetUuid, falling back to SAS")
+					startKeyExchange(endpointId)
+				}
 			}
 			else
 			{
@@ -763,21 +810,27 @@ class MeshService : Service()
 	fun broadcastFlood(innerPayload: ByteArray, ttl: Byte = MAX_TTL, bypassRateLimit: Boolean = false): Boolean
 	{
 		val now = System.currentTimeMillis()
-		if (!bypassRateLimit && now - lastOutboundFloodTime < RATE_LIMIT_MS) return false
-		lastOutboundFloodTime = now
+		if (!bypassRateLimit)
+		{
+			val prev = lastOutboundFloodTime.get()
+			if (now - prev < RATE_LIMIT_MS) return false
+			if (!lastOutboundFloodTime.compareAndSet(prev, now)) return false
+		}
 
 		val packetId = secureRandom.nextLong()
 		synchronized(seenPacketIds) { seenPacketIds[packetId] = true }
 
 		val envelope = packFloodEnvelope(packetId, ttl, innerPayload)
+		var sentCount = 0
 		endpointToUUIDMap.forEach { (epId, uuid) ->
 			if (uuid in verifiedNodes)
 			{
 				Log.d("MeshService", "Sending flood packet ${innerPayload[0]} to verified peer $uuid")
 				connectionsClient.sendPayload(epId, Payload.fromBytes(envelope))
+				sentCount++
 			}
 		}
-		return true
+		return sentCount > 0
 	}
 
 	private fun handleFloodEnvelope(fromEndpointId: String, body: ByteArray)
@@ -802,7 +855,11 @@ class MeshService : Service()
 		val innerPayload = ByteArray(buffer.remaining()).also { buffer.get(it) }
 		val innerType = innerPayload.firstOrNull()?.let { PayloadType.fromByte(it) }
 
-		if (innerType != PayloadType.MutualVerifyRequest && innerType != PayloadType.MutualVerifyResponse && innerType != PayloadType.MultiHopKeyExchange)
+		if (innerType != PayloadType.MutualVerifyRequest &&
+			innerType != PayloadType.MutualVerifyResponse &&
+			innerType != PayloadType.MultiHopKeyExchange &&
+			innerType != PayloadType.ChatAck
+		)
 		{
 			val now = System.currentTimeMillis()
 			if (now - (lastInboundFloodTime[fromEndpointId] ?: 0L) < RATE_LIMIT_MS) return
@@ -878,6 +935,10 @@ class MeshService : Service()
 				if (requesterUuid == myUUID || targetUuid == myUUID) return
 
 				serviceScope.launch {
+					val requesterNode = nodeDao.getNodeById(requesterUuid)
+					val isRequesterTrusted = requesterNode?.trustStatus == "VerifiedSAS" || requesterNode?.trustStatus == "VerifiedMutual"
+					if (!isRequesterTrusted) return@launch
+
 					val targetNode = nodeDao.getNodeById(targetUuid)
 					val isTrusted = targetNode?.trustStatus == "VerifiedSAS" ||
 							targetNode?.trustStatus == "VerifiedMutual"
@@ -917,66 +978,83 @@ class MeshService : Service()
 			}
 
 			PayloadType.MutualVerifyResponse -> {
-				if (innerBody.size < 8) return
-				val buf = ByteBuffer.wrap(innerBody)
-
-				val reqLen = buf.short.toInt() and 0xFFFF
-				val requesterUuid = ByteArray(reqLen).also { buf.get(it) }.toString(Charsets.UTF_8)
-
-				val bridgeLen = buf.short.toInt() and 0xFFFF
-				val bridgeUuid = ByteArray(bridgeLen).also { buf.get(it) }.toString(Charsets.UTF_8)
-
-				val targetLen = buf.short.toInt() and 0xFFFF
-				val targetUuid = ByteArray(targetLen).also { buf.get(it) }.toString(Charsets.UTF_8)
-
-				if (targetUuid == myUUID)
+				try
 				{
-					serviceScope.launch {
-						val existing = nodeDao.getNodeById(requesterUuid)
-						val alreadyVerified = existing?.trustStatus == "VerifiedSAS" || existing?.trustStatus == "VerifiedMutual"
-						if (!alreadyVerified && !pendingMutualVerifications.containsKey(requesterUuid))
-						{
-							delay(600L.milliseconds)
-							requestMutualVerification(requesterUuid)
-						}
-					}
-					return
-				}
+					if (innerBody.size < 8) return
+					val buf = ByteBuffer.wrap(innerBody)
 
-				if (requesterUuid != myUUID) return
+					val reqLen = buf.short.toInt() and 0xFFFF
+					val requesterUuid =
+						ByteArray(reqLen).also { buf.get(it) }.toString(Charsets.UTF_8)
 
-				val pubKeyLen = buf.short.toInt() and 0xFFFF
-				val targetPubKeyBase64 = ByteArray(pubKeyLen).also { buf.get(it) }.toString(Charsets.UTF_8)
+					val bridgeLen = buf.short.toInt() and 0xFFFF
+					val bridgeUuid =
+						ByteArray(bridgeLen).also { buf.get(it) }.toString(Charsets.UTF_8)
 
-				val signatureBytes = ByteArray(buf.remaining()).also { buf.get(it) }
+					val targetLen = buf.short.toInt() and 0xFFFF
+					val targetUuid =
+						ByteArray(targetLen).also { buf.get(it) }.toString(Charsets.UTF_8)
 
-				serviceScope.launch {
-					val bridgeNode = nodeDao.getNodeById(bridgeUuid)
-					val isBridgeTrusted = bridgeNode?.trustStatus == "VerifiedSAS" ||
-							bridgeNode?.trustStatus == "VerifiedMutual"
-
-					Log.d("MeshService", "VerifyResponse from bridge $bridgeUuid: bridgeTrusted=$isBridgeTrusted")
-					if (isBridgeTrusted && bridgeNode.publicKey != null) {
-						val bridgePubKeyBytes = Base64.decode(bridgeNode.publicKey, Base64.NO_WRAP)
-						val attestationPayload = "$targetUuid:$targetPubKeyBase64".toByteArray(Charsets.UTF_8)
-
-						val isValid = CryptoManager.verifySignature(
-							publicKeyBytes = bridgePubKeyBytes,
-							data = attestationPayload,
-							signatureBytes = signatureBytes
-						)
-
-						if (isValid) {
-							pendingMutualVerifications.remove(targetUuid)?.cancel()
-							nodeDao.insertNode(
-								NodeEntity(
-									nodeId = targetUuid,
-									displayName = getPeerLabel(targetUuid),
-									publicKey = targetPubKeyBase64,
-									trustStatus = "VerifiedMutual",
-									lastSeen = System.currentTimeMillis()
+					if (targetUuid == myUUID)
+					{
+						serviceScope.launch {
+							val existing = nodeDao.getNodeById(requesterUuid)
+							val alreadyVerified =
+								existing?.trustStatus == "VerifiedSAS" || existing?.trustStatus == "VerifiedMutual"
+							if (!alreadyVerified && !pendingMutualVerifications.containsKey(
+									requesterUuid
 								)
 							)
+							{
+								delay(600L.milliseconds)
+								requestMutualVerification(requesterUuid)
+							}
+						}
+						return
+					}
+
+					if (requesterUuid != myUUID) return
+
+					val pubKeyLen = buf.short.toInt() and 0xFFFF
+					val targetPubKeyBase64 =
+						ByteArray(pubKeyLen).also { buf.get(it) }.toString(Charsets.UTF_8)
+
+					val signatureBytes = ByteArray(buf.remaining()).also { buf.get(it) }
+
+					serviceScope.launch {
+						val bridgeNode = nodeDao.getNodeById(bridgeUuid)
+						val isBridgeTrusted =
+							bridgeNode?.trustStatus == "VerifiedSAS" || bridgeNode?.trustStatus == "VerifiedMutual"
+
+						Log.d(
+							"MeshService",
+							"VerifyResponse from bridge $bridgeUuid: bridgeTrusted=$isBridgeTrusted"
+						)
+						if (isBridgeTrusted && bridgeNode.publicKey != null)
+						{
+							val bridgePubKeyBytes =
+								Base64.decode(bridgeNode.publicKey, Base64.NO_WRAP)
+							val attestationPayload =
+								"$targetUuid:$targetPubKeyBase64".toByteArray(Charsets.UTF_8)
+
+							val isValid = CryptoManager.verifySignature(
+								publicKeyBytes = bridgePubKeyBytes,
+								data = attestationPayload,
+								signatureBytes = signatureBytes
+							)
+							if (isValid)
+							{
+								pendingMutualVerifications.remove(targetUuid)?.cancel()
+								nodeDao.insertNode(
+									NodeEntity(
+										nodeId = targetUuid,
+										displayName = getPeerLabel(targetUuid),
+										publicKey = targetPubKeyBase64,
+										trustStatus = "VerifiedMutual",
+										lastSeen = System.currentTimeMillis()
+									)
+								)
+							}
 							PeerRepository.addOrUpdatePeer(
 								Peer(
 									getPeerLabel(targetUuid),
@@ -987,10 +1065,17 @@ class MeshService : Service()
 							)
 							PeerRepository.setPeerVerified(targetUuid, true)
 							showMutualVerificationNotification(targetUuid, bridgeUuid)
-							Log.d("MeshService", "Mutually verified $targetUuid via bridge $bridgeUuid")
+							Log.d(
+								"MeshService",
+								"Mutually verified $targetUuid via bridge $bridgeUuid"
+							)
 							initiateMultiHopKeyExchange(targetUuid)
 						}
 					}
+				}
+				catch (_: BufferUnderflowException)
+				{
+					Log.w("MeshService", "Malformed MutualVerifyResponse packet dropped")
 				}
 			}
 
@@ -1033,8 +1118,13 @@ class MeshService : Service()
 						return@launch
 					}
 
-					val myKeyPair = multiHopLocalKeyPairs.computeIfAbsent(senderUuid) {
-						CryptoManager.generateEcKeyPair()
+					val myKeyPair = if (isReply)
+					{
+						multiHopLocalKeyPairs[senderUuid] ?: return@launch
+					}
+					else
+					{
+						multiHopLocalKeyPairs.computeIfAbsent(senderUuid) { CryptoManager.generateEcKeyPair() }
 					}
 					if (!isReply)
 					{
@@ -1062,6 +1152,12 @@ class MeshService : Service()
 				val buf = ByteBuffer.wrap(innerBody)
 
 				val msgUuid = UUID(buf.long, buf.long)
+				val msgIdStr = msgUuid.toString()
+				synchronized(seenMessageIds)
+				{
+					if (seenMessageIds.containsKey(msgIdStr)) return
+					seenMessageIds[msgIdStr] = true
+				}
 
 				val senderLen = buf.short.toInt() and 0xFFFF
 				val senderUuid = ByteArray(senderLen).also { buf.get(it) }.toString(Charsets.UTF_8)
@@ -1161,6 +1257,7 @@ class MeshService : Service()
 			senderUuid.hashCode(),
 			Intent(this, MainActivity::class.java).apply {
 				flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+				putExtra("NAVIGATE_TO_PEER", senderUuid)
 			},
 			PendingIntent.FLAG_IMMUTABLE
 		)
