@@ -20,7 +20,11 @@ import com.nkminion.nodus.ui.NavigationScreenContent
 import com.nkminion.nodus.ui.TextScreenContent
 
 @Composable
-fun AppNavigation(displayName: String)
+fun AppNavigation(
+	displayName: String,
+	pendingChatPeerUuid: String? = null,
+	onConsumedChatPeerUuid: () -> Unit = {}
+)
 {
 	LaunchedEffect(displayName) {
 		MeshService.instance?.currentSessionDisplayName = displayName
@@ -29,6 +33,16 @@ fun AppNavigation(displayName: String)
 	val context = LocalContext.current
 	val db = remember { NodusDatabase.getDBInstance(context) }
 	val navController = rememberNavController()
+
+	LaunchedEffect(pendingChatPeerUuid) {
+		if (!pendingChatPeerUuid.isNullOrBlank())
+		{
+			navController.navigate("TextScreen/$pendingChatPeerUuid") {
+				launchSingleTop = true
+			}
+			onConsumedChatPeerUuid()
+		}
+	}
 
 	NavHost(
 		navController = navController,
@@ -57,11 +71,14 @@ fun AppNavigation(displayName: String)
 			{
 				value = db.nodeDao().getNodeById(peerUUID)
 			}
+			val isSavedVerified = savedNode?.let {
+				it.trustStatus == "VerifiedSAS" || it.trustStatus == "VerifiedMutual"
+			} ?: false
 			TextScreenContent(
 				peer = peer?: Peer(
 					displayName = savedNode?.displayName ?: "Node-${peerUUID.take(5)}",
 					uuid = peerUUID,
-					isVerified = true,
+					isVerified = isSavedVerified,
 					hops = 5
 				),
 				onBackClick = { navController.popBackStack() }
